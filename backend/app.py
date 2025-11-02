@@ -10,7 +10,7 @@ from werkzeug.utils import secure_filename
 import tempfile
 import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from backend.document_processor import DocumentProcessor
+from .document_processor import DocumentProcessor
 
 app = Flask(__name__)
 
@@ -241,7 +241,7 @@ def validate_input():
             }), 200
         
         # Import validator
-        from backend.input_validator import InputValidator
+        from .input_validator import InputValidator
         
         validator = InputValidator()
         validation_result = validator.validate_input(
@@ -344,7 +344,7 @@ def validate_batch():
             return jsonify({'error': 'No validations provided'}), 400
         
         # Import validator
-        from backend.input_validator import InputValidator
+        from .input_validator import InputValidator
         
         def validate_field(validation_item):
             """Validate a single field - called in parallel"""
