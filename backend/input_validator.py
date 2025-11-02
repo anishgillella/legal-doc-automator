@@ -105,7 +105,7 @@ VALIDATION RULES BY TYPE:
 - For names (string): Should be alphabetic with proper capitalization. Examples: "John Smith", "Jane Doe"
 - For email: Must contain @ and valid domain. Examples: "john@example.com"
 - For currency: Numbers only, 2 decimal places. Examples: "1500.00", "250.99"
-- For date: Use YYYY-MM-DD format. Examples: "2024-12-25"
+- For date: Accept multiple formats (MM/DD/YYYY, MM-DD-YYYY, YYYY-MM-DD, Month DD YYYY, etc.) and convert to YYYY-MM-DD. Examples: "2024-12-25", "12/25/2024", "December 25, 2024"
 - For phone: (XXX) XXX-XXXX or XXX-XXX-XXXX. Examples: "(555) 123-4567" or "555-123-4567"
 - For number: Only digits. Examples: "42", "1000"
 - For address: Street number and name. Examples: "123 Main Street", "456 Oak Avenue"
@@ -132,31 +132,19 @@ Respond ONLY with valid JSON (no other text):
 }}
 
 EXAMPLES:
-- Input "112345" for name field
-  → message: "That looks like numbers, but we need a person's name for this field"
-  → what_was_entered: "112345"
-  → what_expected: "A person's name (letters only)"
-  → suggestion: "Did you mean a name? For example: John Smith, Jane Doe"
-  → example: "John Doe"
-  → is_valid: false
+- Input "11/11/2025" for date field
+  → is_valid: true
+  → formatted_value: "2025-11-11"
+  → message: "Perfect! Converting to standard format."
+  → example: "2025-11-11"
 
 - Input "jhn smith" for name field
   → message: "I think you meant 'John Smith' - let me fix that!"
   → what_was_entered: "jhn smith"
-  → what_expected: "A properly spelled name"
-  → suggestion: "Maybe 'John Smith'? (j-o-h-n)"
   → formatted_value: "John Smith"
-  → example: "John Smith"
-  → confidence: 0.85
+  → suggestion: "Maybe 'John Smith'? (j-o-h-n)"
   → is_valid: true
-
-- Input "john@gmail" for email field
-  → message: "That email is missing the extension (.com, .org, etc.)"
-  → what_was_entered: "john@gmail"
-  → what_expected: "A complete email address with domain extension"
-  → suggestion: "Did you mean 'john@gmail.com'?"
-  → example: "john@gmail.com"
-  → is_valid: false"""
+  → confidence: 0.85"""
         
         headers = {
             "Authorization": f"Bearer {self.api_key}",

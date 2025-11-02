@@ -413,6 +413,37 @@ def validate_batch():
                         'example': None
                     })
         
+        # Cross-field validation: Check date logic
+        start_date_field = None
+        end_date_field = None
+        for result in results:
+            field_name = result.get('field', '').lower()
+            if 'start' in field_name and 'date' in field_name:
+                start_date_field = result
+            elif 'end' in field_name and 'date' in field_name:
+                end_date_field = result
+        
+        # Validate date range if both dates are present and valid
+        if start_date_field and end_date_field and start_date_field.get('is_valid') and end_date_field.get('is_valid'):
+            try:
+                from datetime import datetime
+                start_str = start_date_field.get('formatted_value', '')
+                end_str = end_date_field.get('formatted_value', '')
+                
+                # Try to parse dates
+                start_date = datetime.strptime(start_str, '%Y-%m-%d')
+                end_date = datetime.strptime(end_str, '%Y-%m-%d')
+                
+                if start_date >= end_date:
+                    # Start date is after or equal to end date - invalid!
+                    end_date_field['is_valid'] = False
+                    end_date_field['message'] = f'End date must be after start date ({start_str}). Currently set to {end_str}.'
+                    end_date_field['suggestion'] = f'The end date should be after {start_str}. Please enter a later date.'
+                    end_date_field['what_expected'] = f'A date after {start_str}'
+            except Exception as e:
+                print(f"Date range validation error: {str(e)}")
+                # If parsing fails, just continue - individual validation already handled it
+        
         return jsonify({'results': results}), 200
     
     except Exception as e:
