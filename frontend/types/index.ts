@@ -39,17 +39,17 @@ export interface FormState {
 }
 
 export interface ValidationResponse {
-  field?: string;
+  field: string;
   is_valid: boolean;
   is_ambiguous: boolean;
   formatted_value: string;
   confidence: number;
   message: string;
-  clarification_needed?: string;
-  what_was_entered?: string;
-  what_expected?: string;
-  suggestion?: string;
-  example?: string;
+  clarification_needed: string | null;
+  what_was_entered: string | null;
+  what_expected: string | null;
+  suggestion: string | null;
+  example: string | null;
 }
 
 export interface FillResponse {

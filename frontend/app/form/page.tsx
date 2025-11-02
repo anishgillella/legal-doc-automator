@@ -169,9 +169,9 @@ export default function FormPage() {
             hasIssues = false; // Remove from issues count
           } else {
             // Check if we should show formatted value confirmation
-            const shouldConfirm = result.formatted_value && 
+            const shouldConfirm = !!(result.formatted_value && 
                                  result.formatted_value !== state.values[result.field] &&
-                                 result.confidence >= 0.6;
+                                 result.confidence >= 0.6);
             
             fieldStates[result.field] = {
               validationResult: result,
