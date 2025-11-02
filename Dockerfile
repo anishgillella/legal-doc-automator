@@ -16,8 +16,8 @@ RUN pip install --no-cache-dir -r backend/requirements.txt
 # Expose port
 EXPOSE 8000
 
-# Test if the module can be imported
-RUN python -c "from backend.app import app; print('✓ App imports successfully')"
+# Set Python path so backend package can be found
+ENV PYTHONPATH=/app
 
-# Run gunicorn with single worker for easier debugging
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "1", "--timeout", "60", "--log-level", "debug", "backend.app:app"]
+# Run gunicorn
+CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "2", "--timeout", "60", "backend.app:app"]
