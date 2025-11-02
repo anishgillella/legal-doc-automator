@@ -4,13 +4,20 @@ REST endpoints for document processing
 """
 
 import os
+import sys
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 import tempfile
 import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from .document_processor import DocumentProcessor
+
+try:
+    from .document_processor import DocumentProcessor
+except ImportError as e:
+    print(f"ERROR: Failed to import DocumentProcessor: {e}", file=sys.stderr)
+    print(f"Python path: {sys.path}", file=sys.stderr)
+    raise
 
 app = Flask(__name__)
 
