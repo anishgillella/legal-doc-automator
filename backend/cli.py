@@ -3,7 +3,8 @@
 Fill document with user-provided values interactively
 With LLM-powered input validation, formatting, and ambiguity detection
 
-Usage: python fill_document_interactive.py <path_to_document.docx>
+Usage: python -m backend.cli <path_to_document.docx>
+       or: cd backend && python cli.py <path_to_document.docx>
 """
 
 import os
@@ -12,8 +13,8 @@ import sys
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from backend.document_processor import DocumentProcessor
-from backend.input_validator import validate_user_input
+from document_processor import DocumentProcessor
+from input_validator import validate_user_input
 
 
 # Get document path from command line argument
