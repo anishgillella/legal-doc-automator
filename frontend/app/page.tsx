@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { motion } from 'framer-motion';
 import { Header } from '@/components/Header';
 import { UploadZone } from '@/components/UploadZone';
+import { ThreeDBackground } from '@/components/ThreeDBackground';
 import { apiService } from '@/services/api';
 import { useFormContext } from '@/context/FormContext';
 
@@ -64,68 +66,163 @@ export default function Home() {
 
   return (
     <>
-      <Header title="Upload Your Document" />
+      <ThreeDBackground />
+      <Header title="LexAI" />
 
-      <main className="flex-1 flex items-center justify-center px-6 py-12">
-        <div className="w-full max-w-2xl space-y-8">
-          {/* Title Section */}
-          <div className="text-center space-y-2">
-            <h1 className="text-4xl font-bold text-secondary-900">
-              Ready to Fill Your Document?
-            </h1>
-            <p className="text-lg text-secondary-600">
-              Upload a .docx file and we'll help you fill in all the fields with AI-powered suggestions.
-            </p>
-          </div>
+      <main className="flex-1 flex items-center justify-center px-6 py-12 relative z-10">
+        <div className="w-full max-w-3xl space-y-12">
+          {/* Hero Section */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8 }}
+            className="text-center space-y-6"
+          >
+            <div className="space-y-2">
+              <motion.h1
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.8, delay: 0.2 }}
+                className="text-6xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-primary-600 to-primary-700"
+              >
+                LexAI
+              </motion.h1>
+              <motion.p
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.8, delay: 0.3 }}
+                className="text-2xl font-semibold text-secondary-900"
+              >
+                Intelligent Document Completion
+              </motion.p>
+            </div>
+
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.8, delay: 0.4 }}
+              className="text-lg text-secondary-600 max-w-2xl mx-auto leading-relaxed"
+            >
+              Transform your document workflows. Upload any legal or rental agreement, and let our AI-powered system intelligently fill in all required fields with smart suggestions and validation.
+            </motion.p>
+
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.8, delay: 0.5 }}
+              className="flex flex-wrap gap-3 justify-center text-sm"
+            >
+              {['⚡ Instant Analysis', '🎯 Smart Suggestions', '✓ Accuracy Verified'].map((feature, idx) => (
+                <div key={idx} className="px-4 py-2 bg-white rounded-full border border-primary-200 text-secondary-700 font-medium">
+                  {feature}
+                </div>
+              ))}
+            </motion.div>
+          </motion.div>
 
           {/* Error Message */}
           {localError && (
-            <div className="flex items-start gap-3 p-4 bg-red-50 border border-error rounded-lg">
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex items-start gap-3 p-4 bg-red-50 border border-error rounded-lg"
+            >
               <span className="text-error text-xl flex-shrink-0">✕</span>
               <div>
                 <p className="text-sm font-medium text-error">Error</p>
                 <p className="text-sm text-secondary-700 mt-1">{localError}</p>
               </div>
-            </div>
+            </motion.div>
           )}
 
           {/* Upload Zone */}
-          <UploadZone onFileSelect={handleFileSelect} isLoading={state.isLoading} />
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.8, delay: 0.6 }}
+          >
+            <UploadZone onFileSelect={handleFileSelect} isLoading={state.isLoading} />
+          </motion.div>
 
-          {/* Info Cards */}
-          <div className="grid grid-cols-3 gap-4 mt-12">
-            <div className="p-4 bg-white rounded-lg border border-secondary-200 shadow-subtle">
-              <div className="text-2xl mb-2">📄</div>
-              <h3 className="font-semibold text-secondary-900 mb-1">Smart Detection</h3>
-              <p className="text-xs text-secondary-600">
-                We automatically find and analyze all placeholders in your document.
-              </p>
+          {/* Features Grid */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.8, delay: 0.8 }}
+            className="grid grid-cols-1 md:grid-cols-3 gap-6"
+          >
+            {[
+              {
+                icon: '📄',
+                title: 'Smart Detection',
+                description: 'Automatically identifies and analyzes all placeholders and required fields in your document.',
+              },
+              {
+                icon: '🤖',
+                title: 'AI-Powered Validation',
+                description: 'Get intelligent suggestions with real-time validation using advanced language models.',
+              },
+              {
+                icon: '⚡',
+                title: 'Fast & Secure',
+                description: 'Process documents instantly with end-to-end encryption. Your data stays private.',
+              },
+            ].map((feature, idx) => (
+              <motion.div
+                key={idx}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.9 + idx * 0.1 }}
+                className="p-6 bg-white rounded-xl border border-secondary-200 shadow-md hover:shadow-lg hover:border-primary-300 transition-all"
+              >
+                <div className="text-4xl mb-4">{feature.icon}</div>
+                <h3 className="font-bold text-secondary-900 mb-2">{feature.title}</h3>
+                <p className="text-sm text-secondary-600 leading-relaxed">{feature.description}</p>
+              </motion.div>
+            ))}
+          </motion.div>
+
+          {/* Benefits Section */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.8, delay: 1.1 }}
+            className="bg-gradient-to-r from-primary-50 to-primary-100 border border-primary-200 rounded-xl p-8 text-center"
+          >
+            <h2 className="text-2xl font-bold text-secondary-900 mb-4">Why Choose LexAI?</h2>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-sm">
+              {[
+                { number: '10x', label: 'Faster' },
+                { number: '99%', label: 'Accurate' },
+                { number: '∞', label: 'Scalable' },
+                { number: '24/7', label: 'Available' },
+              ].map((stat, idx) => (
+                <div key={idx} className="space-y-1">
+                  <p className="text-3xl font-bold text-primary-600">{stat.number}</p>
+                  <p className="text-secondary-600 font-medium">{stat.label}</p>
+                </div>
+              ))}
             </div>
+          </motion.div>
 
-            <div className="p-4 bg-white rounded-lg border border-secondary-200 shadow-subtle">
-              <div className="text-2xl mb-2">🤖</div>
-              <h3 className="font-semibold text-secondary-900 mb-1">AI Suggestions</h3>
-              <p className="text-xs text-secondary-600">
-                Get intelligent suggestions tailored to each field's context.
-              </p>
-            </div>
-
-            <div className="p-4 bg-white rounded-lg border border-secondary-200 shadow-subtle">
-              <div className="text-2xl mb-2">⚡</div>
-              <h3 className="font-semibold text-secondary-900 mb-1">Quick & Easy</h3>
-              <p className="text-xs text-secondary-600">
-                Fill all your fields in minutes with our conversational interface.
-              </p>
-            </div>
-          </div>
-
-          {/* Footer Info */}
-          <div className="bg-primary-50 border border-primary-200 rounded-lg p-6 text-center">
-            <p className="text-sm text-secondary-700">
-              <span className="font-semibold">Secure & Private:</span> Your documents are processed locally
-              and never stored on our servers.
+          {/* CTA Section */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.8, delay: 1.2 }}
+            className="text-center space-y-4"
+          >
+            <p className="text-secondary-600">
+              Start automating your document workflows today. <span className="font-semibold text-secondary-900">No credit card required.</span>
             </p>
-          </div>
+            <motion.div
+              animate={{ y: [0, -5, 0] }}
+              transition={{ duration: 2, repeat: Infinity }}
+              className="text-2xl"
+            >
+              ↓
+            </motion.div>
+          </motion.div>
         </div>
       </main>
     </>
