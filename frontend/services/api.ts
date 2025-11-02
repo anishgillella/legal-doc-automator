@@ -4,7 +4,7 @@
  */
 
 import axios, { AxiosInstance, AxiosError } from 'axios';
-import { ProcessResponse, FillResponse } from '@/types/index';
+import { ProcessResponse, FillResponse, ValidationResponse } from '@/types/index';
 
 class APIService {
   private api: AxiosInstance;
