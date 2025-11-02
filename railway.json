@@ -12,7 +12,6 @@
   "plugins": [],
   "variables": {
     "ENVIRONMENT": "production",
-    "CORS_ORIGINS": "http://localhost:3000",
-    "OPENROUTER_API_KEY": "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"
+    "CORS_ORIGINS": "http://localhost:3000"
   }
 }
