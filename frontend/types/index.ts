@@ -39,6 +39,7 @@ export interface FormState {
 }
 
 export interface ValidationResponse {
+  field?: string;
   is_valid: boolean;
   is_ambiguous: boolean;
   formatted_value: string;
