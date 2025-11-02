@@ -13,7 +13,7 @@ import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 try:
-    from .document_processor import DocumentProcessor
+    from document_processor import DocumentProcessor
 except ImportError as e:
     print(f"ERROR: Failed to import DocumentProcessor: {e}", file=sys.stderr)
     print(f"Python path: {sys.path}", file=sys.stderr)
@@ -248,7 +248,7 @@ def validate_input():
             }), 200
         
         # Import validator
-        from .input_validator import InputValidator
+        from input_validator import InputValidator
         
         validator = InputValidator()
         validation_result = validator.validate_input(
@@ -351,7 +351,7 @@ def validate_batch():
             return jsonify({'error': 'No validations provided'}), 400
         
         # Import validator
-        from .input_validator import InputValidator
+        from input_validator import InputValidator
         
         def validate_field(validation_item):
             """Validate a single field - called in parallel"""

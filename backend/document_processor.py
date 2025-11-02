@@ -4,9 +4,9 @@ import tempfile
 from typing import Dict, List, Optional, Tuple
 from dataclasses import asdict
 
-from .document_handler import DocumentHandler
-from .placeholder_detector import PlaceholderDetector, detect_placeholders_simple
-from .llm_analyzer import LLMAnalyzer, PlaceholderAnalysis
+from document_handler import DocumentHandler
+from placeholder_detector import PlaceholderDetector, detect_placeholders_simple
+from llm_analyzer import LLMAnalyzer, PlaceholderAnalysis
 
 
 class DocumentProcessor:
