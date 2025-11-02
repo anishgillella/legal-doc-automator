@@ -63,18 +63,19 @@ class DocumentProcessor:
         # Convert to dict format for JSON serialization and LLM
         # Include surrounding context for each placeholder to help LLM distinguish duplicates
         placeholders_data = []
-        for p in self.placeholders:
-            # Extract surrounding context (20 chars before and after for focus)
-            start = max(0, p.position - 20)
-            end = min(len(self.full_text), p.position + 20)
+        for idx, p in enumerate(self.placeholders):
+            # Extract surrounding context (100 chars before and after for semantic meaning)
+            start = max(0, p.position - 100)
+            end = min(len(self.full_text), p.position + len(p.text) + 100)
             surrounding_context = self.full_text[start:end].strip()
             
             placeholders_data.append({
+                'index': idx,  # Position index to identify duplicates
                 'text': p.text,
                 'name': p.name,
                 'format': p.format_type,
                 'position': p.position,
-                'context': surrounding_context  # Focused context
+                'context': surrounding_context  # Extended context for better distinction
             })
         
         result = {
@@ -90,13 +91,13 @@ class DocumentProcessor:
             try:
                 self.llm_analyzer = LLMAnalyzer()
                 
-                # Get document context for analysis
-                context = self._get_analysis_context()
-                
-                # Analyze placeholders
-                self.placeholder_analyses = self.llm_analyzer.analyze_placeholders(
+                # Use new semantic grouping approach:
+                # Send ALL placeholders + full document to LLM
+                # LLM identifies which are duplicates and groups them
+                # Returns ONE question per unique semantic group
+                self.placeholder_analyses = self.llm_analyzer.group_placeholders_by_semantic_meaning(
                     placeholders_data,
-                    context
+                    self.full_text  # Full document context
                 )
                 
                 # Convert analyses to dict format
@@ -120,7 +121,7 @@ class DocumentProcessor:
             except Exception as e:
                 result['error_analyzing'] = str(e)
                 result['analyzed'] = False
-                print(f"Warning: LLM analysis failed: {e}")
+                print(f"Warning: LLM semantic grouping failed: {e}")
         
         return result
     

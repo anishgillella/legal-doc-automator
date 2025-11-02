@@ -42,25 +42,23 @@ class PlaceholderDetector:
         load_dotenv()
         self.llm_api_key = os.getenv('OPENROUTER_API_KEY')
     
-    def detect_placeholders(self, text: str, use_llm: bool = True) -> List[Placeholder]:
+    def detect_placeholders(self, text: str, use_llm: bool = False) -> List[Placeholder]:
         """
-        Detect placeholders using LLM first for better accuracy, then regex as fallback
+        Detect placeholders using regex for complete coverage
         
         Args:
             text: The text to search for placeholders
-            use_llm: Whether to use LLM for primary detection
+            use_llm: Unused (kept for backward compatibility)
         
         Returns:
             List of Placeholder objects found
         """
-        # STEP 1: LLM-based detection (primary)
-        if use_llm and self.llm_api_key:
-            llm_placeholders = self._detect_with_llm(text)
-            if llm_placeholders:
-                return llm_placeholders
-        
-        # STEP 2: Regex fallback (if LLM unavailable or fails)
+        # Regex-based detection (primary - gets 100% coverage)
         regex_placeholders = self._detect_with_regex(text)
+        
+        # Sort by position
+        regex_placeholders.sort(key=lambda p: p.position)
+        
         return regex_placeholders
     
     def _detect_with_regex(self, text: str) -> List[Placeholder]:

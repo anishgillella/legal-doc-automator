@@ -61,25 +61,40 @@ class LLMAnalyzer:
         """Build the prompt for analyzing placeholders"""
         placeholders_str = json.dumps(placeholders, indent=2)
         
-        prompt = f"""You are analyzing placeholders in a legal document. For each placeholder, determine:
-1. What type of data is expected (string, email, currency, date, number, etc.)
-2. What this field represents (description)
-3. How to ask the user for this information in a natural way
+        prompt = f"""You are analyzing ALL placeholders found in a legal document by regex pattern matching.
+Your CRITICAL task is to provide UNIQUE analysis for EACH placeholder, even if they have identical text.
+
+You MUST use the 'context' field to distinguish what each placeholder represents.
+
+CRITICAL EXAMPLES:
+If you see the SAME placeholder text like "[_____________]" appearing twice:
+1. First occurrence with context: "...of $[_____________] (the "Purchase Amount")..."
+   → This is the PURCHASE AMOUNT - ask "What is the investment amount in dollars?"
+   
+2. Second occurrence with context: "...The "Post-Money Valuation Cap" is $[_____________]..."
+   → This is the VALUATION CAP - ask "What is the post-money valuation cap?"
+
+These are DIFFERENT fields with DIFFERENT meanings despite identical placeholder text!
+
+For each placeholder, determine:
+1. Data type (string, currency, date, email, number, address, phone, etc.)
+2. What this field represents based on SURROUNDING CONTEXT (not just the placeholder text)
+3. A UNIQUE natural question to ask the user (different for each placeholder even if text is identical)
 4. An example value
 5. Whether it's required
 6. Any validation hints
 
-IMPORTANT: Some placeholders may look identical (same text), but they appear in different parts of the document.
-Pay close attention to the 'context' field (surrounding text) to distinguish between them.
-Each placeholder with a different context should get a different description and question.
+MUST: Each placeholder gets a DIFFERENT question if context reveals different meanings!
+MUST: Use 'context' field to understand semantic meaning of each placeholder!
+MUST: Two placeholders with same text but different context = two different questions!
 
 Document Context (for reference):
 {context}
 
-Placeholders to analyze (each with surrounding context to distinguish duplicates):
+All regex-detected placeholders with their index and surrounding context:
 {placeholders_str}
 
-Respond in JSON format with an array of objects, each with:
+Respond in JSON format with an array of objects (one per placeholder), each with:
 {{
     "placeholder_text": "the placeholder as it appears",
     "placeholder_name": "extracted name",
@@ -229,6 +244,128 @@ Return ONLY the JSON array, no other text."""
             analyses.append(analysis)
         
         return analyses
+
+    def group_placeholders_by_semantic_meaning(self, placeholders: List[Dict], document_context: str) -> List[PlaceholderAnalysis]:
+        """
+        Analyze ALL placeholders together to identify semantic duplicates and group them.
+        
+        Args:
+            placeholders: ALL regex-detected placeholders with text and index
+            document_context: Full document text for context
+        
+        Returns:
+            List of PlaceholderAnalysis - one per unique semantic group
+        """
+        placeholders_str = json.dumps(placeholders, indent=2)
+        
+        prompt = f"""You are analyzing ALL placeholders found in a legal document.
+Your task is to identify which placeholders represent the SAME semantic field (even if text looks different).
+
+CRITICAL: Identify semantic grouping:
+- Placeholders [_____________] at indices 2 and 7 might represent DIFFERENT fields
+  - Index 2 context: purchase amount
+  - Index 7 context: valuation cap
+  → These are DIFFERENT groups - need 2 questions
+
+For each UNIQUE semantic field, provide:
+1. Which placeholder indices belong to this group (e.g., [2, 7] or just [0])
+2. The placeholder text(s) that represent this field
+3. Data type
+4. ONE clear, concise question to ask the user (not paraphrased variants)
+5. Description based on document context
+6. Example value
+7. Whether required
+8. Validation hints
+
+IMPORTANT: 
+- If multiple placeholders represent the SAME field → group them, ONE question
+- If placeholders look same but represent DIFFERENT fields → separate groups, different questions
+- Generate EXACTLY ONE question per unique semantic group
+- Do NOT paraphrase similar questions
+
+Full document context:
+{document_context}
+
+All regex-detected placeholders (with index for grouping):
+{placeholders_str}
+
+Return JSON format with array of analysis objects:
+[
+  {{
+    "placeholder_indices": [2],
+    "placeholder_texts": ["[_____________]"],
+    "placeholder_name": "Purchase Amount",
+    "data_type": "currency",
+    "suggested_question": "What is the purchase amount in dollars?",
+    "description": "The investment amount paid by the investor",
+    "example": "$500,000",
+    "required": true,
+    "validation_hint": "Must be a positive amount"
+  }},
+  ...
+]
+
+IMPORTANT: Return only this JSON array, no other text."""
+
+        try:
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "HTTP-Referer": "https://github.com/anishgillella/lexsy-document-ai",
+                "X-Title": "Lexsy Document AI",
+                "Content-Type": "application/json"
+            }
+            
+            payload = {
+                "model": self.model,
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0,  # Deterministic
+                "max_tokens": 4000
+            }
+            
+            response = requests.post(
+                f"{self.base_url}/chat/completions",
+                headers=headers,
+                data=json.dumps(payload),
+                timeout=60
+            )
+            
+            response.raise_for_status()
+            result = response.json()
+            
+            if 'choices' in result and len(result['choices']) > 0:
+                llm_response = result['choices'][0]['message']['content']
+                
+                # Parse JSON response
+                import re as regex_module
+                json_match = regex_module.search(r'\[.*\]', llm_response, regex_module.DOTALL)
+                if not json_match:
+                    print("Could not find JSON in LLM response")
+                    return []
+                
+                grouped_data = json.loads(json_match.group(0))
+                
+                # Convert to PlaceholderAnalysis objects
+                analyses = []
+                for group in grouped_data:
+                    analysis = PlaceholderAnalysis(
+                        placeholder_text=group.get('placeholder_texts', [group.get('placeholder_text', '')])[0],
+                        placeholder_name=group.get('placeholder_name', 'Unknown'),
+                        data_type=group.get('data_type', 'string'),
+                        description=group.get('description', ''),
+                        suggested_question=group.get('suggested_question', 'What is this field?'),
+                        example=group.get('example', ''),
+                        required=group.get('required', True),
+                        validation_hint=group.get('validation_hint', None)
+                    )
+                    analyses.append(analysis)
+                
+                return analyses
+            
+            return []
+        
+        except Exception as e:
+            print(f"Error grouping placeholders: {e}")
+            return []
 
 
 def analyze_placeholders(placeholders: List[Dict], context: str, 
