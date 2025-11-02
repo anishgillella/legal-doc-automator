@@ -32,16 +32,17 @@ COPY backend/ .
 ENV PATH=/root/.local/bin:$PATH \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    API_PORT=5000 \
-    API_HOST=0.0.0.0 \
     ENVIRONMENT=production
+
+# Default port for local testing (Railway will override with $PORT)
+ENV PORT=5000
+
+# Expose port (informational for Railway)
+EXPOSE $PORT
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD python -c "import requests; requests.get('http://localhost:5000/api/health')" || exit 1
+    CMD python -c "import requests; requests.get('http://localhost:${PORT}/api/health')" || exit 1
 
-# Expose port
-EXPOSE 5000
-
-# Run with gunicorn using wsgi entry point
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "4", "--worker-class", "sync", "--timeout", "120", "--access-logfile", "-", "--error-logfile", "-", "wsgi:app"]
+# Run with gunicorn, using PORT env var (Railway sets this automatically)
+CMD gunicorn --bind 0.0.0.0:${PORT} --workers 4 --worker-class sync --timeout 120 --access-logfile - --error-logfile - wsgi:app
