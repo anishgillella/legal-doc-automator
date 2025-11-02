@@ -20,6 +20,10 @@ class ValidationResult:
     confidence: float  # Confidence score (0-1)
     message: str  # Message to show user
     clarification_needed: Optional[str] = None  # What to ask user
+    what_was_entered: Optional[str] = None  # Echo what user entered
+    what_expected: Optional[str] = None  # What the field expects
+    suggestion: Optional[str] = None  # Suggestion for correction
+    example: Optional[str] = None  # Example of correct format
 
 
 class InputValidator:
@@ -80,43 +84,79 @@ class InputValidator:
     ) -> ValidationResult:
         """Call LLM to validate input"""
         
-        prompt = f"""You are validating user input for a form field.
+        prompt = f"""You are an intelligent form validation assistant. Your job is to validate user input and provide HELPFUL, DETAILED feedback.
 
-Field Information:
+FIELD INFORMATION:
 - Field Name: {field_name}
 - Expected Type: {data_type}
 - Question Asked: {suggested_question}
 
-User Input: "{user_input}"
+USER INPUT: "{user_input}"
 
-Your tasks:
-1. Validate: Is this a reasonable value for this field?
-2. Format: Convert to correct format if needed
-3. Ambiguity: Does this need clarification? (e.g., date format ambiguity)
-4. Confidence: How confident are you (0-1)?
+YOUR TASKS:
+1. Determine if this is valid for the field
+2. If invalid, explain what's wrong in a friendly way
+3. If there's a typo, suggest the correction
+4. Provide examples of correct input if needed
+5. Check for ambiguity (e.g., date formats)
+6. Provide a formatted/corrected version if applicable
 
-Rules:
-- For dates: Standardize to YYYY-MM-DD
-- For phone: Standardize to (XXX) XXX-XXXX or XXX-XXX-XXXX
-- For email: Validate email format
-- For currency: Remove symbols, ensure 2 decimal places
-- For names: Proper capitalization
+VALIDATION RULES BY TYPE:
+- For names (string): Should be alphabetic with proper capitalization. Examples: "John Smith", "Jane Doe"
+- For email: Must contain @ and valid domain. Examples: "john@example.com"
+- For currency: Numbers only, 2 decimal places. Examples: "1500.00", "250.99"
+- For date: Use YYYY-MM-DD format. Examples: "2024-12-25"
+- For phone: (XXX) XXX-XXXX or XXX-XXX-XXXX. Examples: "(555) 123-4567" or "555-123-4567"
+- For number: Only digits. Examples: "42", "1000"
+- For address: Street number and name. Examples: "123 Main Street", "456 Oak Avenue"
+
+FEEDBACK STYLE:
+- Be conversational and friendly
+- If wrong, explain what they entered and what we need instead
+- Offer specific suggestions
+- Provide good examples
+- Don't just say "invalid" - be helpful!
 
 Respond ONLY with valid JSON (no other text):
 {{
     "is_valid": true/false,
     "is_ambiguous": true/false,
-    "formatted_value": "the formatted value",
+    "formatted_value": "the formatted/corrected value or original if unchanged",
     "confidence": 0.0-1.0,
-    "message": "brief message to user",
-    "clarification": "clarification needed (null if none)"
+    "message": "friendly message about the validation result",
+    "clarification": "clarification question if ambiguous (null if none)",
+    "what_was_entered": "echo back what they typed",
+    "what_expected": "description of what this field should contain",
+    "suggestion": "specific suggestion if there's an error (null if valid)",
+    "example": "example of correct input for this field"
 }}
 
-Examples:
-- Input "john" for name → formatted_value: "John", confidence: 0.95
-- Input "12/25/24" for date → is_ambiguous: true, clarification: "Is this MM/DD/YY?"
-- Input "invalid@" for email → is_valid: false, message: "Invalid email format"
-- Input "$1,000.50" for currency → formatted_value: "1000.50", confidence: 0.95"""
+EXAMPLES:
+- Input "112345" for name field
+  → message: "That looks like numbers, but we need a person's name for this field"
+  → what_was_entered: "112345"
+  → what_expected: "A person's name (letters only)"
+  → suggestion: "Did you mean a name? For example: John Smith, Jane Doe"
+  → example: "John Doe"
+  → is_valid: false
+
+- Input "jhn smith" for name field
+  → message: "I think you meant 'John Smith' - let me fix that!"
+  → what_was_entered: "jhn smith"
+  → what_expected: "A properly spelled name"
+  → suggestion: "Maybe 'John Smith'? (j-o-h-n)"
+  → formatted_value: "John Smith"
+  → example: "John Smith"
+  → confidence: 0.85
+  → is_valid: true
+
+- Input "john@gmail" for email field
+  → message: "That email is missing the extension (.com, .org, etc.)"
+  → what_was_entered: "john@gmail"
+  → what_expected: "A complete email address with domain extension"
+  → suggestion: "Did you mean 'john@gmail.com'?"
+  → example: "john@gmail.com"
+  → is_valid: false"""
         
         headers = {
             "Authorization": f"Bearer {self.api_key}",
@@ -129,7 +169,7 @@ Examples:
             "model": self.model,
             "messages": [{"role": "user", "content": prompt}],
             "temperature": 0.2,  # Low temp for consistent validation
-            "max_tokens": 500
+            "max_tokens": 800
         }
         
         response = requests.post(
@@ -160,6 +200,10 @@ Examples:
         confidence = validation_data.get('confidence', 0.0)
         message = validation_data.get('message', '')
         clarification = validation_data.get('clarification')
+        what_was_entered = validation_data.get('what_was_entered', user_input)
+        what_expected = validation_data.get('what_expected', '')
+        suggestion = validation_data.get('suggestion')
+        example = validation_data.get('example', '')
         
         # Check confidence threshold
         if confidence < self.min_confidence and is_valid:
@@ -168,8 +212,12 @@ Examples:
                 is_ambiguous=True,
                 formatted_value=formatted_value,
                 confidence=confidence,
-                message=f"Low confidence ({confidence:.0%}). Please verify.",
-                clarification_needed=f"Is '{formatted_value}' correct for {field_name}?"
+                message=f"I'm not quite sure about this. Could you verify?",
+                clarification_needed=f"Is '{formatted_value}' the correct {field_name}?",
+                what_was_entered=what_was_entered,
+                what_expected=what_expected,
+                suggestion=suggestion,
+                example=example
             )
         
         return ValidationResult(
@@ -178,7 +226,11 @@ Examples:
             formatted_value=formatted_value,
             confidence=confidence,
             message=message,
-            clarification_needed=clarification
+            clarification_needed=clarification,
+            what_was_entered=what_was_entered,
+            what_expected=what_expected,
+            suggestion=suggestion,
+            example=example
         )
 
 

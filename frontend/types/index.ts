@@ -45,6 +45,10 @@ export interface ValidationResponse {
   confidence: number;
   message: string;
   clarification_needed?: string;
+  what_was_entered?: string;
+  what_expected?: string;
+  suggestion?: string;
+  example?: string;
 }
 
 export interface FillResponse {

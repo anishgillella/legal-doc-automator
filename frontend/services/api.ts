@@ -11,7 +11,7 @@ class APIService {
   private baseURL: string;
 
   constructor() {
-    this.baseURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+    this.baseURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001';
 
     this.api = axios.create({
       baseURL: this.baseURL,
@@ -105,6 +105,55 @@ class APIService {
     } catch (error) {
       console.error('Health check failed:', error);
       return false;
+    }
+  }
+
+  /**
+   * Validate user input using LLM
+   */
+  async validateInput(
+    userInput: string,
+    fieldType: string,
+    fieldName: string,
+    placeholderName?: string
+  ): Promise<ValidationResponse> {
+    try {
+      const response = await this.api.post<ValidationResponse>(
+        '/api/validate',
+        {
+          user_input: userInput,
+          field_type: fieldType,
+          field_name: fieldName,
+          placeholder_name: placeholderName || fieldName
+        }
+      );
+      return response.data;
+    } catch (error) {
+      console.error('Validation failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Validate multiple fields in parallel (batch)
+   */
+  async validateBatch(
+    validations: Array<{
+      field: string;
+      value: string;
+      type: string;
+      name: string;
+    }>
+  ): Promise<ValidationResponse[]> {
+    try {
+      const response = await this.api.post<{ results: ValidationResponse[] }>(
+        '/api/validate-batch',
+        { validations }
+      );
+      return response.data.results;
+    } catch (error) {
+      console.error('Batch validation failed:', error);
+      throw error;
     }
   }
 }

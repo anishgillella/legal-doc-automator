@@ -9,7 +9,7 @@ import { useFormContext } from '@/context/FormContext';
 
 export default function Home() {
   const router = useRouter();
-  const { setFile, setPlaceholders, setLoading, state } = useFormContext();
+  const { setFile, setPlaceholders, setLoading, reset, state } = useFormContext();
   const [localError, setLocalError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -32,6 +32,11 @@ export default function Home() {
     try {
       setLocalError(null);
       setLoading(true);
+      
+      // Reset form context to clear old values from previous upload
+      reset();
+      
+      // Set new file
       setFile(file);
 
       // Process the document

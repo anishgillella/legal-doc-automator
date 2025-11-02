@@ -9,6 +9,7 @@ from flask_cors import CORS
 from werkzeug.utils import secure_filename
 import tempfile
 import json
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from .document_processor import DocumentProcessor
 
 app = Flask(__name__)
@@ -195,6 +196,82 @@ def fill_document():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/validate', methods=['POST'])
+def validate_input():
+    """
+    Validate user input using LLM
+    
+    Request body:
+    {
+        "user_input": "user's text input",
+        "field_type": "string/email/currency/date/phone/number/address",
+        "field_name": "name of the field",
+        "placeholder_name": "placeholder name for context"
+    }
+    
+    Returns:
+    {
+        "is_valid": true/false,
+        "is_ambiguous": true/false,
+        "formatted_value": "auto-formatted if applicable",
+        "confidence": 0.0-1.0,
+        "message": "validation message",
+        "clarification_needed": "clarification question if ambiguous"
+    }
+    """
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'error': 'No JSON data provided'}), 400
+        
+        user_input = data.get('user_input', '').strip()
+        field_type = data.get('field_type', 'string')
+        field_name = data.get('field_name', 'field')
+        placeholder_name = data.get('placeholder_name', '')
+        
+        if not user_input:
+            return jsonify({
+                'is_valid': False,
+                'is_ambiguous': False,
+                'formatted_value': '',
+                'confidence': 0,
+                'message': f'{field_name} cannot be empty',
+                'clarification_needed': None
+            }), 200
+        
+        # Import validator
+        from .input_validator import InputValidator
+        
+        validator = InputValidator()
+        validation_result = validator.validate_input(
+            user_input=user_input,
+            field_name=field_name,
+            data_type=field_type,
+            suggested_question=f"What is the {field_name.lower()}?"
+        )
+        
+        # Convert to JSON-serializable format
+        return jsonify({
+            'is_valid': validation_result.is_valid,
+            'is_ambiguous': validation_result.is_ambiguous,
+            'formatted_value': validation_result.formatted_value,
+            'confidence': validation_result.confidence,
+            'message': validation_result.message,
+            'clarification_needed': validation_result.clarification_needed,
+            'what_was_entered': validation_result.what_was_entered,
+            'what_expected': validation_result.what_expected,
+            'suggestion': validation_result.suggestion,
+            'example': validation_result.example
+        }), 200
+    
+    except Exception as e:
+        print(f"Validation error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/placeholders', methods=['POST'])
 def get_placeholders():
     """
@@ -224,6 +301,124 @@ def get_placeholders():
         return jsonify(result), 200
     
     except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/validate-batch', methods=['POST'])
+def validate_batch():
+    """
+    Validate multiple fields in parallel
+    
+    Request body:
+    {
+        "validations": [
+            {
+                "field": "tenant_name",
+                "value": "12345",
+                "type": "string",
+                "name": "Tenant Name"
+            },
+            ...
+        ]
+    }
+    
+    Returns:
+    {
+        "results": [
+            {
+                "field": "tenant_name",
+                "is_valid": false,
+                "is_ambiguous": false,
+                "message": "That looks like numbers...",
+                ...
+            },
+            ...
+        ]
+    }
+    """
+    try:
+        data = request.get_json()
+        validations = data.get('validations', [])
+        
+        if not validations:
+            return jsonify({'error': 'No validations provided'}), 400
+        
+        # Import validator
+        from .input_validator import InputValidator
+        
+        def validate_field(validation_item):
+            """Validate a single field - called in parallel"""
+            try:
+                validator = InputValidator()
+                result = validator.validate_input(
+                    user_input=validation_item.get('value', ''),
+                    field_name=validation_item.get('name', validation_item.get('field', 'field')),
+                    data_type=validation_item.get('type', 'string'),
+                    suggested_question=f"What is the {validation_item.get('name', 'field').lower()}?"
+                )
+                
+                # Return result with field identifier
+                return {
+                    'field': validation_item.get('field'),
+                    'is_valid': result.is_valid,
+                    'is_ambiguous': result.is_ambiguous,
+                    'formatted_value': result.formatted_value,
+                    'confidence': result.confidence,
+                    'message': result.message,
+                    'clarification_needed': result.clarification_needed,
+                    'what_was_entered': result.what_was_entered,
+                    'what_expected': result.what_expected,
+                    'suggestion': result.suggestion,
+                    'example': result.example
+                }
+            except Exception as e:
+                print(f"Error validating field {validation_item.get('field')}: {str(e)}")
+                return {
+                    'field': validation_item.get('field'),
+                    'is_valid': True,  # Fallback to valid if LLM fails
+                    'is_ambiguous': False,
+                    'formatted_value': validation_item.get('value', ''),
+                    'confidence': 0.5,
+                    'message': 'Validation skipped (LLM unavailable)',
+                    'clarification_needed': None,
+                    'what_was_entered': validation_item.get('value', ''),
+                    'what_expected': '',
+                    'suggestion': None,
+                    'example': None
+                }
+        
+        # Validate all fields in parallel
+        results = []
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            futures = {executor.submit(validate_field, v): v for v in validations}
+            
+            for future in as_completed(futures):
+                try:
+                    result = future.result()
+                    results.append(result)
+                except Exception as e:
+                    validation_item = futures[future]
+                    print(f"Thread error for {validation_item.get('field')}: {str(e)}")
+                    results.append({
+                        'field': validation_item.get('field'),
+                        'is_valid': True,
+                        'is_ambiguous': False,
+                        'formatted_value': validation_item.get('value', ''),
+                        'confidence': 0.5,
+                        'message': 'Validation failed (error occurred)',
+                        'clarification_needed': None,
+                        'what_was_entered': validation_item.get('value', ''),
+                        'what_expected': '',
+                        'suggestion': None,
+                        'example': None
+                    })
+        
+        return jsonify({'results': results}), 200
+    
+    except Exception as e:
+        print(f"Batch validation error: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 
