@@ -25,24 +25,25 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy Python dependencies from builder
 COPY --from=builder /root/.local /root/.local
 
-# Copy application code
+# Copy application code and entrypoint
 COPY backend/ .
+
+# Make entrypoint executable
+RUN chmod +x entrypoint.sh
 
 # Set environment variables
 ENV PATH=/root/.local/bin:$PATH \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    ENVIRONMENT=production
+    ENVIRONMENT=production \
+    PORT=5000
 
-# Default port for local testing (Railway will override with $PORT)
-ENV PORT=5000
-
-# Expose port (informational for Railway)
-EXPOSE $PORT
+# Expose port (informational)
+EXPOSE 5000 8000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD python -c "import requests; requests.get('http://localhost:${PORT}/api/health')" || exit 1
+    CMD python -c "import socket; socket.create_connection(('localhost', int(__import__('os').environ.get('PORT', 5000))), timeout=5)" || exit 1
 
-# Run with gunicorn, using PORT env var (Railway sets this automatically)
-CMD gunicorn --bind 0.0.0.0:${PORT} --workers 4 --worker-class sync --timeout 120 --access-logfile - --error-logfile - wsgi:app
+# Use entrypoint script to properly expand PORT variable
+ENTRYPOINT ["./entrypoint.sh"]

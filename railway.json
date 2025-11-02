@@ -6,8 +6,7 @@
   "deploy": {
     "numReplicas": 1,
     "restartPolicyType": "on_failure",
-    "restartPolicyMaxRetries": 3,
-    "startCommand": "gunicorn --bind 0.0.0.0:$PORT --workers 4 --worker-class sync --timeout 120 --access-logfile - --error-logfile - wsgi:app"
+    "restartPolicyMaxRetries": 3
   },
   "plugins": [],
   "variables": {
