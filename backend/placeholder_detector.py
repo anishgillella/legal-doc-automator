@@ -42,28 +42,25 @@ class PlaceholderDetector:
         load_dotenv()
         self.llm_api_key = os.getenv('OPENROUTER_API_KEY')
     
-    def detect_placeholders(self, text: str, use_llm_fallback: bool = True) -> List[Placeholder]:
+    def detect_placeholders(self, text: str, use_llm: bool = True) -> List[Placeholder]:
         """
-        Detect placeholders using regex first, then LLM for edge cases
+        Detect placeholders using LLM first for better accuracy, then regex as fallback
         
         Args:
             text: The text to search for placeholders
-            use_llm_fallback: Whether to use LLM for fallback detection
+            use_llm: Whether to use LLM for primary detection
         
         Returns:
             List of Placeholder objects found
         """
-        # STEP 1: Regex-based detection (fast)
+        # STEP 1: LLM-based detection (primary)
+        if use_llm and self.llm_api_key:
+            llm_placeholders = self._detect_with_llm(text)
+            if llm_placeholders:
+                return llm_placeholders
+        
+        # STEP 2: Regex fallback (if LLM unavailable or fails)
         regex_placeholders = self._detect_with_regex(text)
-        
-        # STEP 2: LLM fallback (catches missed placeholders)
-        if use_llm_fallback and self.llm_api_key:
-            llm_placeholders = self._detect_with_llm_fallback(text, regex_placeholders)
-            regex_placeholders.extend(llm_placeholders)
-        
-        # Sort by position
-        regex_placeholders.sort(key=lambda p: p.position)
-        
         return regex_placeholders
     
     def _detect_with_regex(self, text: str) -> List[Placeholder]:
@@ -91,6 +88,91 @@ class PlaceholderDetector:
                     placeholders.append(placeholder)
         
         return placeholders
+    
+    def _detect_with_llm(self, text: str) -> List[Placeholder]:
+        """
+        Detect placeholders using LLM (primary detection method)
+        
+        Returns:
+            List of placeholders found by LLM
+        """
+        try:
+            prompt = f"""You are analyzing a document to find placeholder fields that need to be filled in.
+
+A placeholder is text that represents a field/value that needs user input. Examples:
+- [name], [Company Name], [date]
+- {{first_name}}, {{email}}
+- _phone_number_, __address__
+- <recipient>, <date>
+
+The document text is below. Look for ALL text that appears to be a placeholder field that a user should fill in.
+Return ONLY a JSON array of placeholders found, with no other text.
+
+Format: [{{"text": "exact placeholder as it appears", "position": position_in_text}}]
+
+Document text:
+{text[:3000]}"""
+            
+            headers = {
+                "Authorization": f"Bearer {self.llm_api_key}",
+                "HTTP-Referer": "https://github.com/anishgillella/lexsy-document-ai",
+                "X-Title": "Lexsy Document AI",
+                "Content-Type": "application/json"
+            }
+            
+            payload = {
+                "model": "qwen/qwen2.5-vl-72b-instruct",
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0,  # Deterministic results
+                "max_tokens": 2000
+            }
+            
+            response = requests.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                headers=headers,
+                data=json.dumps(payload),
+                timeout=60
+            )
+            
+            if response.status_code != 200:
+                print(f"LLM detection failed with status {response.status_code}")
+                return []
+            
+            result = response.json()
+            llm_response = result['choices'][0]['message']['content']
+            
+            # Parse JSON response
+            import re as regex_module
+            json_match = regex_module.search(r'\[.*\]', llm_response, regex_module.DOTALL)
+            if not json_match:
+                return []
+            
+            llm_results = json.loads(json_match.group(0))
+            
+            # Convert to Placeholder objects
+            placeholders = []
+            for item in llm_results:
+                placeholder_text = item.get('text', '')
+                if placeholder_text:
+                    # Find position in text
+                    pos = text.find(placeholder_text)
+                    placeholder = Placeholder(
+                        text=placeholder_text,
+                        name=placeholder_text.strip('[]{}()<>_'),
+                        format_type='llm_detected',
+                        position=pos if pos >= 0 else 0,
+                        end_position=pos + len(placeholder_text) if pos >= 0 else len(placeholder_text),
+                        detected_by='llm'
+                    )
+                    placeholders.append(placeholder)
+            
+            # Sort by position
+            placeholders.sort(key=lambda p: p.position)
+            return placeholders
+        
+        except Exception as e:
+            print(f"LLM placeholder detection failed: {e}")
+            return []
     
     def _detect_with_llm_fallback(self, text: str, regex_results: List[Placeholder]) -> List[Placeholder]:
         """
@@ -192,7 +274,7 @@ Document text:
     
     def extract_placeholder_names(self, text: str) -> List[str]:
         """Extract unique placeholder names"""
-        placeholders = self.detect_placeholders(text, use_llm_fallback=False)
+        placeholders = self.detect_placeholders(text, use_llm=False)
         names = []
         seen = set()
         
@@ -207,7 +289,7 @@ Document text:
 def detect_placeholders_simple(text: str) -> List[Dict]:
     """Convenience function for quick placeholder detection"""
     detector = PlaceholderDetector()
-    placeholders = detector.detect_placeholders(text, use_llm_fallback=False)
+    placeholders = detector.detect_placeholders(text, use_llm=False)
     
     return [
         {

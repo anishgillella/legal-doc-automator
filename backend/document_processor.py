@@ -61,15 +61,21 @@ class DocumentProcessor:
             }
         
         # Convert to dict format for JSON serialization and LLM
-        placeholders_data = [
-            {
+        # Include surrounding context for each placeholder to help LLM distinguish duplicates
+        placeholders_data = []
+        for p in self.placeholders:
+            # Extract surrounding context (20 chars before and after for focus)
+            start = max(0, p.position - 20)
+            end = min(len(self.full_text), p.position + 20)
+            surrounding_context = self.full_text[start:end].strip()
+            
+            placeholders_data.append({
                 'text': p.text,
                 'name': p.name,
                 'format': p.format_type,
-                'position': p.position
-            }
-            for p in self.placeholders
-        ]
+                'position': p.position,
+                'context': surrounding_context  # Focused context
+            })
         
         result = {
             "success": True,
@@ -140,21 +146,66 @@ class DocumentProcessor:
         
         Args:
             values: Dictionary mapping placeholder text -> replacement value
-                   e.g., {"_founder_name_": "John Doe", "_company_name_": "Acme Inc"}
+                   Supports both direct text keys and position-based keys (text__pos_N)
+                   e.g., {"_founder_name_": "John Doe", "[_____________]__pos_0": "150000"}
         
         Returns:
             Tuple of (success: bool, output_path: str)
         """
         try:
-            # Replace each placeholder
-            failed_replacements = []
-            for placeholder_text, value in values.items():
-                success = self.doc_handler.replace_placeholder(placeholder_text, value)
-                if not success:
-                    failed_replacements.append(placeholder_text)
+            # IMPORTANT: Load the document first!
+            if not self.doc_handler.load_document():
+                print("Failed to load document")
+                return False, ""
             
-            if failed_replacements:
-                print(f"Warning: Failed to replace: {failed_replacements}")
+            # Separate position-based keys from regular keys
+            position_based = {}
+            regular = {}
+            
+            for key, value in values.items():
+                if '__pos_' in key:
+                    position_based[key] = value
+                else:
+                    regular[key] = value
+            
+            total_replacements = 0
+            
+            # Replace position-based placeholders first (most specific)
+            for key, value in position_based.items():
+                # Extract placeholder text and position: "text__pos_0" -> ("text", 0)
+                placeholder_text = key.rsplit('__pos_', 1)[0]
+                try:
+                    position = int(key.rsplit('__pos_', 1)[1])
+                    success = self.doc_handler.replace_placeholder_at_position(placeholder_text, value, position)
+                    if success:
+                        total_replacements += 1
+                    else:
+                        # Try regular replacement as fallback
+                        success = self.doc_handler.replace_placeholder(placeholder_text, value)
+                        if success:
+                            total_replacements += 1
+                            print(f"Fallback: Replaced {key} using regular method")
+                        else:
+                            print(f"Warning: Failed to replace {key}")
+                except Exception as e:
+                    print(f"Error with position-based replacement {key}: {e}")
+                    # Try regular replacement as fallback
+                    try:
+                        success = self.doc_handler.replace_placeholder(placeholder_text, value)
+                        if success:
+                            total_replacements += 1
+                    except:
+                        pass
+            
+            # Replace remaining regular placeholders
+            for placeholder_text, value in regular.items():
+                success = self.doc_handler.replace_placeholder(placeholder_text, value)
+                if success:
+                    total_replacements += 1
+                else:
+                    print(f"Warning: Failed to replace: {placeholder_text}")
+            
+            print(f"Successfully replaced {total_replacements}/{len(values)} placeholders")
             
             # Save to temporary file
             temp_dir = tempfile.gettempdir()
@@ -163,10 +214,13 @@ class DocumentProcessor:
             if self.doc_handler.save_document(output_path):
                 return True, output_path
             else:
+                print("Failed to save document")
                 return False, ""
             
         except Exception as e:
             print(f"Error filling placeholders: {e}")
+            import traceback
+            traceback.print_exc()
             return False, ""
     
     def fill_by_name(self, values: Dict[str, str]) -> Tuple[bool, str]:

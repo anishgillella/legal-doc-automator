@@ -69,10 +69,14 @@ class LLMAnalyzer:
 5. Whether it's required
 6. Any validation hints
 
-Document Context:
+IMPORTANT: Some placeholders may look identical (same text), but they appear in different parts of the document.
+Pay close attention to the 'context' field (surrounding text) to distinguish between them.
+Each placeholder with a different context should get a different description and question.
+
+Document Context (for reference):
 {context}
 
-Placeholders to analyze:
+Placeholders to analyze (each with surrounding context to distinguish duplicates):
 {placeholders_str}
 
 Respond in JSON format with an array of objects, each with:
@@ -116,7 +120,7 @@ Return ONLY the JSON array, no other text."""
                     "content": prompt
                 }
             ],
-            "temperature": 0.3,  # Lower temperature for consistent analysis
+            "temperature": 0,  # Deterministic: 0 for consistent, reproducible results
             "top_p": 0.9,
             "max_tokens": 2000
         }

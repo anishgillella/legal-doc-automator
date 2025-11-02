@@ -180,6 +180,122 @@ class DocumentHandler:
             print(f"Error replacing placeholder: {e}")
             return False
     
+    def replace_placeholder_at_position(self, placeholder: str, value: str, position_index: int = 0) -> bool:
+        """
+        Replace a specific occurrence of a placeholder (useful for duplicates)
+        
+        Args:
+            placeholder: The placeholder text to find
+            value: The replacement value
+            position_index: Which occurrence to replace (0 = first, 1 = second, etc.)
+        
+        Returns:
+            True if replacement was successful
+        """
+        try:
+            occurrence_count = 0
+            
+            # Search in paragraphs first
+            for para in self.doc.paragraphs:
+                if placeholder in para.text:
+                    full_para_text = ''.join([run.text for run in para.runs])
+                    
+                    if placeholder in full_para_text:
+                        # Count occurrences up to this point
+                        count_in_para = full_para_text.count(placeholder)
+                        
+                        if occurrence_count <= position_index < occurrence_count + count_in_para:
+                            # This is the paragraph containing our target
+                            # For simplicity, replace all in this paragraph
+                            # (More complex logic needed for multiple in same para)
+                            new_text = full_para_text.replace(placeholder, value, 1)
+                            
+                            # Get formatting from first run
+                            first_run_format = None
+                            if para.runs:
+                                first_run = para.runs[0]
+                                first_run_format = {
+                                    'bold': first_run.bold,
+                                    'italic': first_run.italic,
+                                    'font_name': first_run.font.name,
+                                    'font_size': first_run.font.size,
+                                    'color': first_run.font.color.rgb if first_run.font.color and first_run.font.color.rgb else None
+                                }
+                            
+                            # Clear all runs
+                            for run in para.runs:
+                                r = run._element
+                                r.getparent().remove(r)
+                            
+                            # Add new run with replaced text
+                            new_run = para.add_run(new_text)
+                            
+                            # Apply preserved formatting
+                            if first_run_format:
+                                new_run.bold = first_run_format['bold']
+                                new_run.italic = first_run_format['italic']
+                                if first_run_format['font_name']:
+                                    new_run.font.name = first_run_format['font_name']
+                                if first_run_format['font_size']:
+                                    new_run.font.size = first_run_format['font_size']
+                                if first_run_format['color']:
+                                    new_run.font.color.rgb = first_run_format['color']
+                            
+                            return True
+                        
+                        occurrence_count += count_in_para
+            
+            # Search in table cells
+            for table in self.doc.tables:
+                for row in table.rows:
+                    for cell in row.cells:
+                        if placeholder in cell.text:
+                            for para in cell.paragraphs:
+                                if placeholder in para.text:
+                                    full_para_text = ''.join([run.text for run in para.runs])
+                                    
+                                    if placeholder in full_para_text:
+                                        count_in_para = full_para_text.count(placeholder)
+                                        
+                                        if occurrence_count <= position_index < occurrence_count + count_in_para:
+                                            new_text = full_para_text.replace(placeholder, value, 1)
+                                            
+                                            first_run_format = None
+                                            if para.runs:
+                                                first_run = para.runs[0]
+                                                first_run_format = {
+                                                    'bold': first_run.bold,
+                                                    'italic': first_run.italic,
+                                                    'font_name': first_run.font.name,
+                                                    'font_size': first_run.font.size,
+                                                    'color': first_run.font.color.rgb if first_run.font.color and first_run.font.color.rgb else None
+                                                }
+                                            
+                                            for run in para.runs:
+                                                r = run._element
+                                                r.getparent().remove(r)
+                                            
+                                            new_run = para.add_run(new_text)
+                                            
+                                            if first_run_format:
+                                                new_run.bold = first_run_format['bold']
+                                                new_run.italic = first_run_format['italic']
+                                                if first_run_format['font_name']:
+                                                    new_run.font.name = first_run_format['font_name']
+                                                if first_run_format['font_size']:
+                                                    new_run.font.size = first_run_format['font_size']
+                                                if first_run_format['color']:
+                                                    new_run.font.color.rgb = first_run_format['color']
+                                            
+                                            return True
+                                        
+                                        occurrence_count += count_in_para
+            
+            return False
+        except Exception as e:
+            print(f"Error replacing placeholder at position: {e}")
+            return False
+    
     def replace_multiple_placeholders(self, replacements: Dict[str, str]) -> Dict[str, bool]:
         """
         Replace multiple placeholders at once
