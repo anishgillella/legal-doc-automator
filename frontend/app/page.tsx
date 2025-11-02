@@ -6,6 +6,7 @@ import { motion } from 'framer-motion';
 import { Header } from '@/components/Header';
 import { UploadZone } from '@/components/UploadZone';
 import { ThreeDBackground } from '@/components/ThreeDBackground';
+import { ParsingLoader } from '@/components/ParsingLoader';
 import { apiService } from '@/services/api';
 import { useFormContext } from '@/context/FormContext';
 
@@ -13,6 +14,7 @@ export default function Home() {
   const router = useRouter();
   const { setFile, setPlaceholders, setLoading, reset, state } = useFormContext();
   const [localError, setLocalError] = useState<string | null>(null);
+  const [parsingFileName, setParsingFileName] = useState<string | null>(null);
 
   useEffect(() => {
     // Check backend health on mount
@@ -34,6 +36,7 @@ export default function Home() {
     try {
       setLocalError(null);
       setLoading(true);
+      setParsingFileName(file.name);
       
       // Reset form context to clear old values from previous upload
       reset();
@@ -53,6 +56,7 @@ export default function Home() {
 
       // Set loading to false before navigating
       setLoading(false);
+      setParsingFileName(null);
 
       // Redirect to form
       router.push('/form');
@@ -61,6 +65,7 @@ export default function Home() {
         error instanceof Error ? error.message : 'Failed to process document. Please try again.';
       setLocalError(errorMessage);
       setLoading(false);
+      setParsingFileName(null);
     }
   };
 
@@ -68,6 +73,9 @@ export default function Home() {
     <>
       <ThreeDBackground />
       <Header title="LexAI" />
+      
+      {/* Show loader while parsing */}
+      {parsingFileName && <ParsingLoader fileName={parsingFileName} />}
 
       <main className="flex-1 flex items-center justify-center px-6 py-12 relative z-10">
         <div className="w-full max-w-3xl space-y-12">
@@ -95,7 +103,7 @@ export default function Home() {
               >
                 Intelligent Document Completion
               </motion.p>
-            </div>
+          </div>
 
             <motion.p
               initial={{ opacity: 0 }}
@@ -141,7 +149,7 @@ export default function Home() {
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.8, delay: 0.6 }}
           >
-            <UploadZone onFileSelect={handleFileSelect} isLoading={state.isLoading} />
+          <UploadZone onFileSelect={handleFileSelect} isLoading={state.isLoading} />
           </motion.div>
 
           {/* Features Grid */}
@@ -187,20 +195,53 @@ export default function Home() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.8, delay: 1.1 }}
-            className="bg-gradient-to-r from-primary-50 to-primary-100 border border-primary-200 rounded-xl p-8 text-center"
+            className="bg-gradient-to-r from-primary-50 to-primary-100 border border-primary-200 rounded-xl p-8"
           >
-            <h2 className="text-2xl font-bold text-secondary-900 mb-4">Why Choose LexAI?</h2>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-sm">
+            <h2 className="text-2xl font-bold text-secondary-900 mb-8 text-center">Why Choose LexAI?</h2>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
               {[
-                { number: '10x', label: 'Faster' },
-                { number: '99%', label: 'Accurate' },
-                { number: '∞', label: 'Scalable' },
-                { number: '24/7', label: 'Available' },
-              ].map((stat, idx) => (
-                <div key={idx} className="space-y-1">
-                  <p className="text-3xl font-bold text-primary-600">{stat.number}</p>
-                  <p className="text-secondary-600 font-medium">{stat.label}</p>
-                </div>
+                { 
+                  icon: '🤖', 
+                  label: 'AI Powered', 
+                  description: 'Advanced LLMs for intelligent analysis' 
+                },
+                { 
+                  icon: '⚡', 
+                  label: 'GPU-Accelerated', 
+                  description: 'Lightning-fast processing' 
+                },
+                { 
+                  icon: '🔍', 
+                  label: 'Semantic Analysis', 
+                  description: 'Understands context, not just text' 
+                },
+                { 
+                  icon: '✓', 
+                  label: 'AI Augmented', 
+                  description: 'Enhances human decision-making' 
+                },
+                { 
+                  icon: '🔒', 
+                  label: 'End-to-End Encrypted', 
+                  description: 'Military-grade security' 
+                },
+                { 
+                  icon: '🗑️', 
+                  label: 'Zero Data Retention', 
+                  description: 'Your data is never stored' 
+                },
+              ].map((feature, idx) => (
+                <motion.div
+                  key={idx}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5, delay: 1.2 + idx * 0.05 }}
+                  className="space-y-2 text-center"
+                >
+                  <p className="text-3xl">{feature.icon}</p>
+                  <p className="font-bold text-secondary-900">{feature.label}</p>
+                  <p className="text-xs text-secondary-600">{feature.description}</p>
+                </motion.div>
               ))}
             </div>
           </motion.div>

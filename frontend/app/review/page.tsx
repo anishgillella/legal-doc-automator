@@ -88,7 +88,7 @@ export default function ReviewPage() {
 
   return (
     <>
-      <Header title="Review & Download" showHome />
+      <Header title="LexAI" />
 
       <main className="flex-1 flex items-center justify-center px-6 py-12">
         <div className="w-full max-w-2xl space-y-8">

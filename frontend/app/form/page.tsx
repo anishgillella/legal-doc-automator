@@ -58,8 +58,8 @@ export default function FormPage() {
   const handleFieldChange = (fieldId: string, value: string) => {
     setValue(fieldId, value);
     // Clear validation for this field when user edits it
-    setFormState(prev => ({
-      ...prev,
+        setFormState(prev => ({ 
+          ...prev, 
       fieldStates: {
         ...prev.fieldStates,
         [fieldId]: {
@@ -76,8 +76,8 @@ export default function FormPage() {
     const fieldState = formState.fieldStates[fieldId];
     if (fieldState?.validationResult?.formatted_value) {
       setValue(fieldId, fieldState.validationResult.formatted_value);
-      setFormState(prev => ({
-        ...prev,
+        setFormState(prev => ({ 
+          ...prev, 
         fieldStates: {
           ...prev.fieldStates,
           [fieldId]: {
@@ -92,8 +92,8 @@ export default function FormPage() {
   };
 
   const handleRejectFormatted = (fieldId: string) => {
-    setFormState(prev => ({
-      ...prev,
+    setFormState(prev => ({ 
+      ...prev, 
       fieldStates: {
         ...prev.fieldStates,
         [fieldId]: {
@@ -113,8 +113,8 @@ export default function FormPage() {
     );
 
     if (missingRequired.length > 0) {
-      setFormState(prev => ({
-        ...prev,
+    setFormState(prev => ({ 
+      ...prev, 
         hasIssues: true,
       }));
       return;
@@ -184,7 +184,7 @@ export default function FormPage() {
           fieldStates[result.field] = {
             validationResult: result,
             awaitingConfirmation: false,
-            retryCount: 0,
+      retryCount: 0,
             lastErrorMessage: null,
           };
         }
@@ -207,13 +207,13 @@ export default function FormPage() {
         });
         // Navigate to review page after a short delay
         setTimeout(() => {
-          router.push('/review');
+      router.push('/review');
         }, 500);
       }
     } catch (error) {
       setFormState(prev => ({
         ...prev,
-        isValidating: false,
+      isValidating: false,
         hasIssues: true,
       }));
       console.error('Batch validation failed:', error);
@@ -222,7 +222,7 @@ export default function FormPage() {
 
   const filledCount = Object.keys(state.values).filter(k => state.values[k]?.trim()).length;
   const progressPercent = Math.round((filledCount / state.placeholders.length) * 100);
-  
+
   // Count issues (invalid fields)
   const issueCount = Object.values(formState.fieldStates).filter(fs => 
     fs.validationResult && !fs.validationResult.is_valid
@@ -230,7 +230,7 @@ export default function FormPage() {
 
   return (
     <>
-      <Header title="Fill Your Document" showHome />
+      <Header title="LexAI" />
 
       <main className="flex-1 flex items-center justify-center px-6 py-12">
         <div className="w-full max-w-4xl space-y-8">
@@ -262,7 +262,7 @@ export default function FormPage() {
                 <div className="flex-1">
                   <p className="font-semibold text-amber-900">
                     {issueCount} {issueCount === 1 ? 'field needs attention' : 'fields need attention'}
-                  </p>
+                    </p>
                   <p className="text-sm text-amber-800 mt-1">
                     Review the highlighted fields below to fix any issues
                   </p>
@@ -358,8 +358,8 @@ export default function FormPage() {
                                   ✓ You've confirmed this entry. Moving forward with your input.
                                 </p>
                               )}
-                            </div>
-                          </div>
+              </div>
+            </div>
 
                           {/* Details for invalid fields */}
                           {hasError && (
@@ -459,7 +459,7 @@ export default function FormPage() {
                               whileTap={{ scale: 0.98 }}
                               onClick={() => handleRejectFormatted(fieldId)}
                               className="flex-1 px-3 py-2 border border-blue-300 hover:bg-blue-100 text-blue-700 text-xs font-medium rounded transition-colors"
-                            >
+                >
                               ✎ Edit
                             </motion.button>
                           </motion.div>
@@ -472,7 +472,7 @@ export default function FormPage() {
             ) : (
               <p className="text-center text-secondary-600">Loading fields...</p>
             )}
-          </div>
+            </div>
 
           {/* Action Buttons */}
           <div className="flex gap-4 justify-between">
