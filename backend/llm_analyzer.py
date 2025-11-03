@@ -406,6 +406,10 @@ IMPORTANT: Return only this JSON array, no other text."""
         Send entire document to LLM and ask it to identify ALL fields that need filling.
         This includes explicit placeholders AND blank fields in a single pass.
         
+        Handles large documents by intelligent chunking:
+        - Documents < 10k chars: Send entire document
+        - Larger documents: Split by sections, analyze each, deduplicate
+        
         Args:
             document_text: The full document text
         
@@ -415,13 +419,128 @@ IMPORTANT: Return only this JSON array, no other text."""
         if len(document_text.strip()) < 100:
             return []
         
-        # Get first 2000 chars for LLM context (avoid token limit)
-        doc_preview = document_text[:2000]
+        doc_length = len(document_text)
         
-        prompt = f"""Analyze this document and identify ALL fields that need to be filled in.
+        # Strategy based on document size
+        if doc_length < 10000:
+            # Small document: send entire thing
+            print(f"📄 Document size: {doc_length} chars (small) - sending entire document")
+            return self._detect_fields_in_chunk(document_text, "Full Document")
+        else:
+            # Large document: split into intelligent chunks
+            print(f"📄 Document size: {doc_length} chars (large) - using intelligent chunking")
+            return self._detect_fields_with_chunking(document_text)
+    
+    def _detect_fields_with_chunking(self, document_text: str) -> List[PlaceholderAnalysis]:
+        """
+        Split large document intelligently and detect fields from all chunks.
+        Deduplicates results from multiple chunks.
+        """
+        chunks = self._split_document_intelligent(document_text)
+        print(f"📑 Split document into {len(chunks)} chunks for analysis")
+        
+        all_fields = []
+        seen_field_names = set()
+        
+        for i, (chunk_name, chunk_text) in enumerate(chunks, 1):
+            print(f"  Analyzing chunk {i}/{len(chunks)}: {chunk_name}")
+            
+            chunk_fields = self._detect_fields_in_chunk(chunk_text, chunk_name)
+            
+            # Add fields, skip duplicates based on field name
+            for field in chunk_fields:
+                if field.placeholder_name not in seen_field_names:
+                    all_fields.append(field)
+                    seen_field_names.add(field.placeholder_name)
+        
+        print(f"✓ Total unique fields detected: {len(all_fields)}")
+        return all_fields
+    
+    def _split_document_intelligent(self, document_text: str, chunk_size: int = 8000) -> List[tuple]:
+        """
+        Split document intelligently by sections while maintaining context.
+        Returns list of (section_name, chunk_text) tuples.
+        """
+        chunks = []
+        
+        # Try to split by common section markers
+        sections = self._split_by_sections(document_text)
+        
+        if len(sections) > 1:
+            # Document has clear sections, use them
+            for section_name, section_text in sections:
+                if len(section_text.strip()) > 100:
+                    chunks.append((section_name, section_text))
+        else:
+            # No clear sections, split by size with overlap
+            text = document_text
+            overlap = 500  # Character overlap between chunks
+            i = 0
+            chunk_num = 1
+            
+            while i < len(text):
+                chunk_end = min(i + chunk_size, len(text))
+                chunk = text[i:chunk_end]
+                chunks.append((f"Section {chunk_num}", chunk))
+                
+                # Move forward, but keep overlap
+                i = chunk_end - overlap
+                if i >= len(text):
+                    break
+                chunk_num += 1
+        
+        return chunks
+    
+    def _split_by_sections(self, document_text: str) -> List[tuple]:
+        """
+        Try to split document by section headers.
+        Looks for patterns like "COMPANY", "INVESTOR", etc.
+        """
+        import re as regex_module
+        
+        # Common SAFE document sections
+        section_markers = [
+            r'^([A-Z][A-Z\s]+):\s*$',  # "SECTION NAME:" on its own line
+            r'^([A-Z][A-Z\s]{5,})$',   # Multi-word ALL CAPS sections
+        ]
+        
+        sections = []
+        current_section = "Preamble"
+        current_content = []
+        
+        for line in document_text.split('\n'):
+            # Check if this is a section header
+            is_section = False
+            for marker in section_markers:
+                match = regex_module.match(marker, line.strip())
+                if match:
+                    # Save previous section
+                    if current_content:
+                        sections.append((current_section, '\n'.join(current_content)))
+                    
+                    # Start new section
+                    current_section = match.group(1).strip()
+                    current_content = []
+                    is_section = True
+                    break
+            
+            if not is_section:
+                current_content.append(line)
+        
+        # Add final section
+        if current_content:
+            sections.append((current_section, '\n'.join(current_content)))
+        
+        return sections if len(sections) > 1 else []
+    
+    def _detect_fields_in_chunk(self, chunk_text: str, chunk_name: str) -> List[PlaceholderAnalysis]:
+        """Analyze a single chunk and detect fields in it"""
+        prompt = f"""Analyze this document chunk and identify ALL fields that need to be filled in.
+
+Chunk: {chunk_name}
 
 Document:
-{doc_preview}
+{chunk_text}
 
 For each field, identify:
 1. Field name or label (e.g., "Name", "Email Address", "Company Name")
@@ -453,16 +572,9 @@ Be thorough and identify every field that needs filling."""
         try:
             response = self._call_openrouter(prompt)
             analyses = self._parse_detect_all_fields_response(response)
-            
-            if analyses:
-                print(f"✓ LLM detected {len(analyses)} fields")
-                return analyses
-            else:
-                print("⚠ LLM detected no fields, returning empty list for regex fallback")
-                return []
-        
+            return analyses
         except Exception as e:
-            print(f"⚠ LLM field detection failed (will use regex fallback): {e}")
+            print(f"⚠ Error analyzing chunk '{chunk_name}': {e}")
             return []
     
     def _parse_detect_all_fields_response(self, response: str) -> List[PlaceholderAnalysis]:
