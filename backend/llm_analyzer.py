@@ -501,39 +501,45 @@ Document:
 IMPORTANT: Only identify fields that meet ONE of these criteria:
 1. Has explicit placeholder markers: [field], _field_, {{field}}, __field__, <field>, etc.
 2. Has blank spaces/underscores after the label: "Name: _____" or "Address:        "
-3. Is clearly a signature line or form field: "By:", "Signature:", "Date:"
+3. Is clearly a form field: "Name:", "Title:", "Email:", "Address:" (but NOT "Signature:" or "By:")
 4. Is in a table cell that's empty or has placeholder text
 
 DO NOT identify as fields:
-❌ Random text with punctuation like "()" or other symbols that are part of sentences
-❌ Explanatory text that happens to have colons, like "Note: This is important"
-❌ Section headers or labels that aren't meant to be filled (like "1. Introduction:")
+❌ Signature fields ("Signature:", "By:", "Sign here", "Signed by")
+❌ Fields that ask for actual signatures or handwriting
+❌ Random text with punctuation like "()" in prose
+❌ Explanatory text like "Note: This is important"
+❌ Section headers like "1. Introduction:"
 ❌ Words in parentheses that are just clarifications
-❌ Any text that's clearly part of the document prose
+❌ Any text that's clearly document prose
 
 For EACH valid field you identify:
-1. Field name or label (e.g., "Name", "Email Address", "Company Name")
-2. The ACTUAL placeholder text as it appears in the document (e.g., "[COMPANY]", "_name_", "Name: ____")
-3. Data type (email, address, string, date, currency, phone, number, url, signature, etc.)
-4. Natural question to ask the user
+1. Field name (e.g., "investor_name", "company_address")
+2. The ACTUAL placeholder text as it appears (e.g., "[Investor Name]", "Address: ____")
+3. Data type (email, address, string, date, currency, phone, number, url - NO "signature")
+4. Natural question to ask user
 5. Example value
-6. Mark as NOT required (all fields are optional)
+6. Mark as NOT required
 
-Return as JSON array with EXACT placeholder text from document:
+CRITICAL RULES:
+- Each field appears ONCE only - do not duplicate fields
+- Do not mix "investor" and "company" fields - keep them separate
+- Exclude ALL signature-related fields
+- Include the EXACT placeholder text from document
+
+Return as JSON array:
 [
   {{
-    "field_name": "investor_name",
-    "field_label": "Name",
-    "placeholder_text": "[INVESTOR NAME]",
-    "data_type": "string",
-    "suggested_question": "What is the investor's full name?",
-    "example": "John Smith",
+    "field_name": "investor_email",
+    "field_label": "Email",
+    "placeholder_text": "Email: ",
+    "data_type": "email",
+    "suggested_question": "What is the investor's email address?",
+    "example": "investor@example.com",
     "required": false,
-    "description": "The full name of the investor"
+    "description": "The email address of the investor"
   }}
-]
-
-CRITICAL: Include the EXACT placeholder text as written in the document!"""
+]"""
 
         try:
             response = self._call_openrouter(prompt)

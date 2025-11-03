@@ -78,8 +78,12 @@ class DocumentHandler:
         Works in both regular paragraphs AND table cells.
         Replaces ALL occurrences in the document.
         
+        Handles two types of placeholders:
+        1. Explicit placeholders: [Company Name] -> Replace entire placeholder
+        2. Blank field placeholders: "Email: " or "Address: " -> Keep label, replace blank
+        
         Args:
-            placeholder: The placeholder text to find (e.g., "[founder_name]")
+            placeholder: The placeholder text to find (e.g., "[founder_name]" or "Email: ")
             value: The replacement value
         
         Returns:
@@ -88,13 +92,24 @@ class DocumentHandler:
         try:
             replaced_count = 0
             
+            # Detect if this is a blank field placeholder (label ending with ": " or ":")
+            is_blank_field = (
+                (': ' in placeholder and placeholder.endswith(': ')) or
+                placeholder.endswith(':')
+            )
+            
             # Replace in regular paragraphs
             for para in self.doc.paragraphs:
                 if placeholder in para.text:
                     full_para_text = ''.join([run.text for run in para.runs])
                     
                     if placeholder in full_para_text:
-                        new_text = full_para_text.replace(placeholder, value)
+                        # For blank fields, only add value after the label
+                        if is_blank_field:
+                            new_text = full_para_text.replace(placeholder, placeholder + value)
+                        else:
+                            # For explicit placeholders, replace the whole placeholder
+                            new_text = full_para_text.replace(placeholder, value)
                         
                         # Get formatting from first run
                         first_run_format = None
@@ -140,7 +155,12 @@ class DocumentHandler:
                                     full_para_text = ''.join([run.text for run in para.runs])
                                     
                                     if placeholder in full_para_text:
-                                        new_text = full_para_text.replace(placeholder, value)
+                                        # For blank fields, only add value after the label
+                                        if is_blank_field:
+                                            new_text = full_para_text.replace(placeholder, placeholder + value)
+                                        else:
+                                            # For explicit placeholders, replace the whole placeholder
+                                            new_text = full_para_text.replace(placeholder, value)
                                         
                                         # Get formatting from first run
                                         first_run_format = None
