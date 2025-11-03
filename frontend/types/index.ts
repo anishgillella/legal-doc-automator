@@ -27,6 +27,8 @@ export interface ProcessResponse {
   }>;
   analyses: PlaceholderAnalysis[];
   analyzed: boolean;
+  status?: 'success' | 'no_placeholders' | 'success_no_llm';
+  message?: string;
 }
 
 export interface FormState {
@@ -36,6 +38,8 @@ export interface FormState {
   currentFieldIndex: number;
   isLoading: boolean;
   error: string | null;
+  documentStatus?: 'idle' | 'success' | 'no_placeholders' | 'success_no_llm';
+  documentMessage?: string;
 }
 
 export interface ValidationResponse {

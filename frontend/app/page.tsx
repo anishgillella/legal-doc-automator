@@ -15,6 +15,7 @@ export default function Home() {
   const { setFile, setPlaceholders, setLoading, reset, state } = useFormContext();
   const [localError, setLocalError] = useState<string | null>(null);
   const [parsingFileName, setParsingFileName] = useState<string | null>(null);
+  const [noPlaceholders, setNoPlaceholders] = useState<{ message: string; file: File } | null>(null);
 
   useEffect(() => {
     // Check backend health on mount
@@ -52,14 +53,24 @@ export default function Home() {
       }
 
       // Store placeholders
+      const hasPlaceholders = response.analyses && response.analyses.length > 0;
       setPlaceholders(response.analyses || []);
 
-      // Set loading to false before navigating
+      // Set loading to false
       setLoading(false);
       setParsingFileName(null);
 
-      // Redirect to form
-      router.push('/form');
+      // Route based on placeholders
+      if (hasPlaceholders) {
+        setNoPlaceholders(null);
+        router.push('/form');
+      } else {
+        // No placeholders - show message on home
+        setNoPlaceholders({
+          message: response.message || "Document processed - no fields to fill found.",
+          file: file
+        });
+      }
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Failed to process document. Please try again.';
@@ -68,6 +79,114 @@ export default function Home() {
       setParsingFileName(null);
     }
   };
+
+  const handleUploadAnother = () => {
+    setNoPlaceholders(null);
+    reset();
+  };
+
+  const handleDownloadDocument = async () => {
+    if (!noPlaceholders?.file) return;
+    
+    try {
+      // For documents with no placeholders, we can still download them
+      // (they're already complete as-is, or user can get original)
+      const blob = new Blob([await noPlaceholders.file.arrayBuffer()], {
+        type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      });
+      
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = noPlaceholders.file.name;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Download error:', error);
+      setLocalError('Failed to download document. Please try again.');
+    }
+  };
+
+  const NoPlaceholdersMessage = ({ 
+    message, 
+    fileName, 
+    onUploadAnother,
+    onDownload 
+  }: {
+    message: string;
+    fileName: string;
+    onUploadAnother: () => void;
+    onDownload: () => void;
+  }) => (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className="w-full max-w-2xl mx-auto space-y-6"
+    >
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        className="bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-xl p-8 text-center"
+      >
+        <motion.div
+          animate={{ scale: [1, 1.1, 1] }}
+          transition={{ duration: 2, repeat: Infinity }}
+          className="text-6xl mb-4"
+        >
+          ℹ️
+        </motion.div>
+        
+        <h2 className="text-2xl font-bold text-blue-900 mb-3">
+          Document Ready
+        </h2>
+        
+        <p className="text-lg text-blue-800 mb-4">
+          {message}
+        </p>
+        
+        <div className="bg-white bg-opacity-60 rounded-lg p-4 mb-6 border border-blue-100">
+          <p className="text-sm text-blue-700">
+            <span className="font-semibold">File:</span> {fileName}
+          </p>
+        </div>
+
+        <div className="space-y-3">
+          <p className="text-sm text-blue-700 mb-4">
+            Your document doesn't have any placeholder fields to fill. You can download the original document or upload another one to fill.
+          </p>
+        </div>
+      </motion.div>
+
+      {/* Action Buttons */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.5, delay: 0.2 }}
+        className="flex gap-4 justify-center"
+      >
+        <motion.button
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+          onClick={onDownload}
+          className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-all flex items-center gap-2"
+        >
+          📥 Download Document
+        </motion.button>
+        
+        <motion.button
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+          onClick={onUploadAnother}
+          className="px-6 py-3 border-2 border-blue-600 text-blue-600 hover:bg-blue-50 font-medium rounded-lg transition-all"
+        >
+          📤 Upload Another
+        </motion.button>
+      </motion.div>
+    </motion.div>
+  );
 
   return (
     <>
@@ -79,6 +198,18 @@ export default function Home() {
 
       <main className="flex-1 flex items-center justify-center px-6 py-12 relative z-10">
         <div className="w-full max-w-3xl space-y-12">
+          {/* Show no-placeholders message if applicable */}
+          {noPlaceholders && (
+            <NoPlaceholdersMessage
+              message={noPlaceholders.message}
+              fileName={noPlaceholders.file.name}
+              onUploadAnother={handleUploadAnother}
+              onDownload={handleDownloadDocument}
+            />
+          )}
+
+          {!noPlaceholders && (
+          <>
           {/* Hero Section */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -264,6 +395,8 @@ export default function Home() {
               ↓
             </motion.div>
           </motion.div>
+          </>
+          )}
         </div>
       </main>
     </>

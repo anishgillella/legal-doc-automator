@@ -92,8 +92,16 @@ def process_document():
                         analysis['placeholder_id'] = f"{analysis['placeholder_text']}_{idx}"
                     result['analyses'] = result_with_llm['analyses']
                     result['analyzed'] = True
+                    # LLM provided analysis - extract message from LLM if available
+                    result['status'] = 'success'
+                    if not result.get('message'):
+                        result['message'] = f"Document analyzed successfully. Found {len(result['analyses'])} fields to fill."
                 else:
+                    # LLM found no placeholders - use LLM's assessment
                     result['analyzed'] = False
+                    result['status'] = 'no_placeholders'
+                    if not result.get('message'):
+                        result['message'] = "Document processed successfully - no fields to fill found."
             except Exception as llm_error:
                 # If LLM fails, use basic analysis
                 print(f"LLM analysis failed (non-blocking): {str(llm_error)}")
@@ -115,6 +123,20 @@ def process_document():
                             'validation_hint': None
                         })
                     result['analyses'] = analyses
+                    result['status'] = 'success_no_llm'
+                    result['message'] = f"Document processed. Found {len(result['placeholders'])} fields to fill (LLM analysis unavailable)."
+                else:
+                    result['status'] = 'no_placeholders'
+                    # If no placeholders, try to get LLM assessment of why
+                    if not result.get('message'):
+                        try:
+                            from llm_analyzer import LLMAnalyzer
+                            analyzer = LLMAnalyzer()
+                            assessment = analyzer.assess_document_content(processor.full_text)
+                            result['message'] = assessment
+                        except Exception as assessment_error:
+                            print(f"Could not generate assessment: {assessment_error}")
+                            result['message'] = "Document processed successfully - no fields to fill." 
             
             return jsonify(result), 200
         

@@ -27,6 +27,8 @@ export function FormProvider({ children }: { children: React.ReactNode }) {
     currentFieldIndex: 0,
     isLoading: false,
     error: null,
+    documentStatus: 'idle', // 'idle' | 'success' | 'no_placeholders' | 'success_no_llm'
+    documentMessage: '',
   });
 
   const setFile = useCallback((file: File | null) => {
@@ -74,6 +76,8 @@ export function FormProvider({ children }: { children: React.ReactNode }) {
       currentFieldIndex: 0,
       isLoading: false,
       error: null,
+      documentStatus: 'idle',
+      documentMessage: '',
     });
   }, []);
 

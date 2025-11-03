@@ -20,6 +20,7 @@ class PlaceholderAnalysis:
 
 
 class LLMAnalyzer:
+    
     def __init__(self, api_key: Optional[str] = None):
         """
         Initialize LLM Analyzer with OpenRouter API
@@ -34,6 +35,37 @@ class LLMAnalyzer:
         
         if not self.api_key:
             raise ValueError("OpenRouter API key not found. Set OPENROUTER_API_KEY in .env")
+    
+    def assess_document_content(self, text: str) -> str:
+        """
+        Provide intelligent assessment when no placeholders found
+        Uses LLM to understand document type and provide context-aware message
+        """
+        if len(text.strip()) == 0:
+            return "Document appears to be empty. No content found to analyze."
+        
+        try:
+            # Ask LLM to assess document type and provide helpful message
+            prompt = f"""Analyze this document and provide a brief assessment:
+
+Document Text (first 1000 chars):
+{text[:1000]}
+
+Provide ONE sentence explaining what type of document this is and why it might not have placeholder fields.
+Be concise and helpful. Examples:
+- "This appears to be a completed rental agreement with all fields already filled in."
+- "This is a template document that uses a different format for variables (e.g., {{{{variable}}}}) rather than underscores."
+- "This document contains mostly text content without structured fields or placeholders."
+
+Response (one sentence only):"""
+            
+            response = self._call_openrouter(prompt)
+            # Extract just the first sentence
+            message = response.split('.')[0] + '.'
+            return message.strip()
+        except Exception as e:
+            print(f"Could not generate assessment: {e}")
+            return "Document processed - no placeholder fields detected in this document."
     
     def analyze_placeholders(self, placeholders: List[Dict], document_context: str) -> List[PlaceholderAnalysis]:
         """
