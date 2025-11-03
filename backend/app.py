@@ -514,4 +514,7 @@ def server_error(error):
 
 if __name__ == '__main__':
     port = int(os.getenv('API_PORT', 5000))
-    app.run(debug=True, host='0.0.0.0', port=port)
+    environment = os.getenv('ENVIRONMENT', 'development')
+    debug_mode = environment == 'development'
+    
+    app.run(debug=debug_mode, host='0.0.0.0', port=port)

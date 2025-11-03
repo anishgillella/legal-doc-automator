@@ -24,14 +24,24 @@ docker build -t lexys-ai-backend:latest .
 
 ## Running the Backend Container
 
-### Basic Run
+### Basic Run (Production)
 ```bash
 docker run -p 5000:5000 lexys-ai-backend:latest
 ```
 
-### With Environment Variables
+This runs with **Gunicorn** (production WSGI server) with 4 workers.
+
+### Development Mode (with Flask debug server)
 ```bash
 docker run -p 5000:5000 \
+  -e ENVIRONMENT=development \
+  lexys-ai-backend:latest
+```
+
+With environment variables:
+```bash
+docker run -p 5000:5000 \
+  -e ENVIRONMENT=production \
   -e API_PORT=5000 \
   -e OPENROUTER_API_KEY=your_key_here \
   -e CORS_ORIGINS=http://localhost:3000 \
@@ -40,9 +50,34 @@ docker run -p 5000:5000 \
 
 ### Available Environment Variables
 - `API_PORT` (default: 5000) - Port the Flask app runs on
+- `ENVIRONMENT` (default: production) - Set to `development` for Flask debug server, `production` for Gunicorn
 - `OPENROUTER_API_KEY` - API key for LLM analysis (optional but recommended)
 - `CORS_ORIGINS` (default: http://localhost:3000) - Comma-separated CORS origins
-- `ENVIRONMENT` (default: production) - Flask environment
+
+## Server Configuration
+
+### Production (Default)
+- **Server**: Gunicorn WSGI
+- **Workers**: 4
+- **Timeout**: 120 seconds
+- **Logging**: stdout/stderr
+- **Debug Mode**: OFF
+- **Port**: 5000
+
+This is the recommended configuration for production deployments.
+
+### Development
+- **Server**: Flask development server
+- **Debug Mode**: ON
+- **Auto-reload**: Enabled
+- **Port**: Configurable via `API_PORT`
+
+To use development mode:
+```bash
+docker run -p 5000:5000 \
+  -e ENVIRONMENT=development \
+  lexys-ai-backend:latest
+```
 
 ## Docker Compose Setup
 
