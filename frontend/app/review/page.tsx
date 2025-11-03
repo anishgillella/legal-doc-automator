@@ -33,20 +33,28 @@ export default function ReviewPage() {
       console.log('Starting download with file:', state.file.name);
       console.log('Total values to fill:', Object.keys(state.values).length);
 
-      // Map values - send both ID-based and text-based for flexibility
+      // Map values - send field names for backend context awareness
       const valuesForBackend: Record<string, string> = {};
+      const fieldMetadata: Record<string, {name: string; placeholder: string}> = {};
+      
       state.placeholders.forEach((p, idx) => {
         const key = p.placeholder_id || p.placeholder_text;
         const value = state.values[key];
         if (value) {
-          // Send with placeholder_text as key (original format)
+          // Send with placeholder_text as key
           valuesForBackend[p.placeholder_text] = value;
+          // Send field name for context-aware replacement
+          fieldMetadata[p.placeholder_text] = {
+            name: p.placeholder_name,
+            placeholder: p.placeholder_text
+          };
           // Also send with position-based key for duplicates
           valuesForBackend[`${p.placeholder_text}__pos_${idx}`] = value;
         }
       });
 
       console.log('Values being sent to backend:', Object.keys(valuesForBackend).length);
+      console.log('Field metadata:', fieldMetadata);
 
       // Call backend to fill document
       const blob = await apiService.fillDocument(state.file, valuesForBackend);
