@@ -400,6 +400,130 @@ IMPORTANT: Return only this JSON array, no other text."""
             return []
 
 
+    def analyze_blank_fields(self, blank_fields: List[Dict], document_context: str) -> List[PlaceholderAnalysis]:
+        """
+        Analyze blank fields (Label: ____ patterns) to understand what data they need.
+        Uses LLM to infer data types and generate questions.
+        
+        Args:
+            blank_fields: List of detected blank fields with their labels
+            document_context: Context from the document
+        
+        Returns:
+            List of PlaceholderAnalysis objects for blank fields
+        """
+        if not blank_fields:
+            return []
+        
+        # Build field list for LLM
+        fields_text = "\n".join([f["name"] for f in blank_fields])
+        
+        prompt = f"""You are analyzing blank fields in a SAFE (Simple Agreement for Future Equity) document.
+
+Detected fields:
+{fields_text}
+
+Document context (first 500 chars):
+{document_context[:500]}
+
+For each field, determine:
+1. Data type (email, address, string, date, currency, phone, number, url, etc.)
+2. Natural question to ask the user
+3. Example value
+4. Whether it's required
+
+Return as JSON array with this structure:
+[
+  {{
+    "field_name": "address",
+    "data_type": "address",
+    "suggested_question": "What is the investor's mailing address?",
+    "example": "123 Main St, San Francisco, CA 94102",
+    "required": true,
+    "description": "The physical address of the investor"
+  }}
+]
+
+Be concise and practical."""
+
+        try:
+            response = self._call_openrouter(prompt)
+            analyses = self._parse_blank_field_response(response, blank_fields)
+            return analyses
+        except Exception as e:
+            print(f"Error analyzing blank fields with LLM: {e}")
+            return self._fallback_blank_field_analysis(blank_fields)
+    
+    def _parse_blank_field_response(self, response: str, blank_fields: List[Dict]) -> List[PlaceholderAnalysis]:
+        """Parse LLM response for blank field analysis"""
+        try:
+            import re as regex_module
+            json_match = regex_module.search(r'\[.*\]', response, regex_module.DOTALL)
+            if json_match:
+                json_str = json_match.group(0)
+            else:
+                json_str = response
+            
+            fields_data = json.loads(json_str)
+            analyses = []
+            
+            for data in fields_data:
+                analysis = PlaceholderAnalysis(
+                    placeholder_text=f"[{data.get('field_name', '')}]",
+                    placeholder_name=data.get('field_name', '').lower().replace(' ', '_'),
+                    data_type=data.get('data_type', 'string'),
+                    description=data.get('description', data.get('field_name', '')),
+                    suggested_question=data.get('suggested_question', f"What is the {data.get('field_name', '')}?"),
+                    example=data.get('example', ''),
+                    required=data.get('required', True),
+                    validation_hint=None
+                )
+                analyses.append(analysis)
+            
+            return analyses
+        except Exception as e:
+            print(f"Error parsing blank field response: {e}")
+            return self._fallback_blank_field_analysis(blank_fields)
+    
+    def _fallback_blank_field_analysis(self, blank_fields: List[Dict]) -> List[PlaceholderAnalysis]:
+        """Fallback analysis for blank fields using heuristics"""
+        analyses = []
+        
+        type_hints = {
+            'email': 'email',
+            'address': 'address',
+            'name': 'string',
+            'phone': 'phone',
+            'date': 'date',
+            'signature': 'string',
+            'title': 'string'
+        }
+        
+        for field in blank_fields:
+            field_name = field['name'].lower()
+            
+            # Try to infer type from field name
+            inferred_type = 'string'
+            for hint, data_type in type_hints.items():
+                if hint in field_name:
+                    inferred_type = data_type
+                    break
+            
+            analysis = PlaceholderAnalysis(
+                placeholder_text=f"[{field['name']}]",
+                placeholder_name=field['name'].lower().replace(' ', '_'),
+                data_type=inferred_type,
+                description=f"Field: {field['name']}",
+                suggested_question=f"What is the {field['name'].lower()}?",
+                example=f"[Example {field['name']}]",
+                required=True,
+                validation_hint=None
+            )
+            analyses.append(analysis)
+        
+        return analyses
+
+
 def analyze_placeholders(placeholders: List[Dict], context: str, 
                         api_key: Optional[str] = None) -> List[PlaceholderAnalysis]:
     """
