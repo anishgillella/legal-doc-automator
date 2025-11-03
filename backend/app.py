@@ -437,11 +437,31 @@ def validate_batch():
                 start_str = start_date_field.get('formatted_value', '')
                 end_str = end_date_field.get('formatted_value', '')
                 
-                # Try to parse dates
-                start_date = datetime.strptime(start_str, '%Y-%m-%d')
-                end_date = datetime.strptime(end_str, '%Y-%m-%d')
+                # Try to parse dates with multiple formats
+                start_date = None
+                end_date = None
                 
-                if start_date >= end_date:
+                # Try YYYY-MM-DD format first (standard)
+                try:
+                    start_date = datetime.strptime(start_str, '%Y-%m-%d')
+                except:
+                    # Try MM/DD/YYYY format (common user input)
+                    try:
+                        start_date = datetime.strptime(start_str, '%m/%d/%Y')
+                    except:
+                        pass
+                
+                try:
+                    end_date = datetime.strptime(end_str, '%Y-%m-%d')
+                except:
+                    # Try MM/DD/YYYY format (common user input)
+                    try:
+                        end_date = datetime.strptime(end_str, '%m/%d/%Y')
+                    except:
+                        pass
+                
+                # Only compare if both dates parsed successfully
+                if start_date and end_date and start_date >= end_date:
                     # Start date is after or equal to end date - invalid!
                     end_date_field['is_valid'] = False
                     end_date_field['message'] = f'End date must be after start date ({start_str}). Currently set to {end_str}.'

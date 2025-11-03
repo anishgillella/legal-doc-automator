@@ -123,11 +123,6 @@ export function ValidationMessage({
           </div>
         )}
       </div>
-
-      {/* Confidence indicator for debugging */}
-      <div className="text-xs text-secondary-500 text-right">
-        Confidence: {(validation.confidence * 100).toFixed(0)}%
-      </div>
     </div>
   );
 }
