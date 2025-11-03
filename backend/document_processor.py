@@ -86,19 +86,26 @@ class DocumentProcessor:
             "placeholders": placeholders_data
         }
         
-        # Step 3: Analyze with LLM (optional)
+        # Step 3: Analyze with LLM (optional) - LLM-FIRST approach
         if analyze_with_llm:
             try:
                 self.llm_analyzer = LLMAnalyzer()
                 
-                # Use new semantic grouping approach:
-                # Send ALL placeholders + full document to LLM
-                # LLM identifies which are duplicates and groups them
-                # Returns ONE question per unique semantic group
-                self.placeholder_analyses = self.llm_analyzer.group_placeholders_by_semantic_meaning(
-                    placeholders_data,
-                    self.full_text  # Full document context
-                )
+                # TRY LLM-FIRST: Ask LLM to detect ALL fields comprehensively
+                print("🔍 Attempting LLM-first field detection...")
+                llm_detected_fields = self.llm_analyzer.detect_all_fields(self.full_text)
+                
+                if llm_detected_fields:
+                    # LLM successfully detected all fields
+                    print(f"✓ LLM detected {len(llm_detected_fields)} fields")
+                    self.placeholder_analyses = llm_detected_fields
+                else:
+                    # LLM detected nothing, fall back to regex+heuristic based analysis
+                    print("⚠ LLM detected no fields, using regex+heuristic detection...")
+                    self.placeholder_analyses = self.llm_analyzer.group_placeholders_by_semantic_meaning(
+                        placeholders_data,
+                        self.full_text
+                    )
                 
                 # Convert analyses to dict format
                 analyses_data = [
@@ -121,7 +128,7 @@ class DocumentProcessor:
             except Exception as e:
                 result['error_analyzing'] = str(e)
                 result['analyzed'] = False
-                print(f"Warning: LLM semantic grouping failed: {e}")
+                print(f"Warning: LLM analysis failed: {e}")
         
         return result
     

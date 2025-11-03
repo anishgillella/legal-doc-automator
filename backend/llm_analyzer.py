@@ -400,6 +400,106 @@ IMPORTANT: Return only this JSON array, no other text."""
             return []
 
 
+    def detect_all_fields(self, document_text: str) -> List[PlaceholderAnalysis]:
+        """
+        LLM-first comprehensive field detection.
+        Send entire document to LLM and ask it to identify ALL fields that need filling.
+        This includes explicit placeholders AND blank fields in a single pass.
+        
+        Args:
+            document_text: The full document text
+        
+        Returns:
+            List of PlaceholderAnalysis objects for all detected fields
+        """
+        if len(document_text.strip()) < 100:
+            return []
+        
+        # Get first 2000 chars for LLM context (avoid token limit)
+        doc_preview = document_text[:2000]
+        
+        prompt = f"""Analyze this document and identify ALL fields that need to be filled in.
+
+Document:
+{doc_preview}
+
+For each field, identify:
+1. Field name or label (e.g., "Name", "Email Address", "Company Name")
+2. Data type (email, address, string, date, currency, phone, number, url, etc.)
+3. Natural question to ask the user
+4. Example value
+5. Whether it's required
+
+Include:
+- Fields with explicit placeholders like [field], _field_, {{field}}, etc.
+- Fields marked as blank lines like "Name: _____" or "Address: ___"
+- Any other fields that appear to need user input
+
+Return as JSON array:
+[
+  {{
+    "field_name": "investor_name",
+    "field_label": "Name",
+    "data_type": "string",
+    "suggested_question": "What is the investor's full name?",
+    "example": "John Smith",
+    "required": true,
+    "description": "The full name of the investor"
+  }}
+]
+
+Be thorough and identify every field that needs filling."""
+
+        try:
+            response = self._call_openrouter(prompt)
+            analyses = self._parse_detect_all_fields_response(response)
+            
+            if analyses:
+                print(f"✓ LLM detected {len(analyses)} fields")
+                return analyses
+            else:
+                print("⚠ LLM detected no fields, returning empty list for regex fallback")
+                return []
+        
+        except Exception as e:
+            print(f"⚠ LLM field detection failed (will use regex fallback): {e}")
+            return []
+    
+    def _parse_detect_all_fields_response(self, response: str) -> List[PlaceholderAnalysis]:
+        """Parse LLM response for detect_all_fields"""
+        try:
+            import re as regex_module
+            json_match = regex_module.search(r'\[.*\]', response, regex_module.DOTALL)
+            if json_match:
+                json_str = json_match.group(0)
+            else:
+                json_str = response
+            
+            fields_data = json.loads(json_str)
+            analyses = []
+            
+            for data in fields_data:
+                # Use field_name if available, otherwise use field_label
+                field_id = data.get('field_name', data.get('field_label', '').lower().replace(' ', '_'))
+                
+                analysis = PlaceholderAnalysis(
+                    placeholder_text=f"[{field_id}]",
+                    placeholder_name=field_id,
+                    data_type=data.get('data_type', 'string'),
+                    description=data.get('description', data.get('field_label', '')),
+                    suggested_question=data.get('suggested_question', f"What is the {data.get('field_label', 'field').lower()}?"),
+                    example=data.get('example', ''),
+                    required=data.get('required', True),
+                    validation_hint=None
+                )
+                analyses.append(analysis)
+            
+            return analyses
+        except Exception as e:
+            print(f"Error parsing detect_all_fields response: {e}")
+            print(f"Response was: {response[:200]}")
+            return []
+
     def analyze_blank_fields(self, blank_fields: List[Dict], document_context: str) -> List[PlaceholderAnalysis]:
         """
         Analyze blank fields (Label: ____ patterns) to understand what data they need.
