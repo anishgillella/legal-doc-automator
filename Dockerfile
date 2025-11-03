@@ -25,25 +25,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy Python dependencies from builder
 COPY --from=builder /root/.local /root/.local
 
-# Copy application code and entrypoint
+# Copy application code
 COPY backend/ .
-
-# Make entrypoint executable
-RUN chmod +x entrypoint.sh
 
 # Set environment variables
 ENV PATH=/root/.local/bin:$PATH \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     ENVIRONMENT=production \
-    PORT=5000
+    API_PORT=5000
 
 # Expose port (informational)
-EXPOSE 5000 8000
+EXPOSE 5000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD python -c "import socket; socket.create_connection(('localhost', int(__import__('os').environ.get('PORT', 5000))), timeout=5)" || exit 1
+    CMD python -c "import socket; socket.create_connection(('localhost', 5000), timeout=5)" || exit 1
 
-# Use entrypoint script to properly expand PORT variable
-ENTRYPOINT ["./entrypoint.sh"]
+# Run Flask app
+CMD ["python", "app.py"]
