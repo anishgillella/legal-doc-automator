@@ -120,13 +120,20 @@ export default function FormPage() {
       return;
     }
 
-    // Prepare batch validation request
-    const validationsToRun = state.placeholders.map(field => ({
-      field: field.placeholder_id || field.placeholder_text,
-      value: state.values[field.placeholder_id || field.placeholder_text] || '',
-      type: field.data_type,
-      name: field.placeholder_name,
-    }));
+    // Prepare batch validation request - ONLY validate fields that have values
+    // Skip optional empty fields
+    const validationsToRun = state.placeholders
+      .filter(field => {
+        const fieldValue = state.values[field.placeholder_id || field.placeholder_text]?.trim();
+        // Include if: has a value, OR is required (even if empty)
+        return fieldValue || field.required;
+      })
+      .map(field => ({
+        field: field.placeholder_id || field.placeholder_text,
+        value: state.values[field.placeholder_id || field.placeholder_text] || '',
+        type: field.data_type,
+        name: field.placeholder_name,
+      }));
 
     setFormState(prev => ({ 
       ...prev, 
