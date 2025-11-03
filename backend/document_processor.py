@@ -210,10 +210,13 @@ class DocumentProcessor:
                 success = self.doc_handler.replace_placeholder(placeholder_text, value)
                 if success:
                     total_replacements += 1
+                    print(f"  ✓ Replaced: {placeholder_text:40} -> {value[:30] if len(value) > 30 else value}")
                 else:
-                    print(f"Warning: Failed to replace: {placeholder_text}")
+                    print(f"  ✗ FAILED:   {placeholder_text:40}")
             
-            print(f"Successfully replaced {total_replacements}/{len(values)} placeholders")
+            print(f"\n{'='*80}")
+            print(f"RESULT: Successfully replaced {total_replacements}/{len(values)} placeholders")
+            print(f"{'='*80}\n")
             
             # Save to temporary file
             temp_dir = tempfile.gettempdir()

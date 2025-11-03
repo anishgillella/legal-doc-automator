@@ -98,6 +98,9 @@ class DocumentHandler:
                 placeholder.endswith(':')
             )
             
+            # Debug: Show what we're looking for
+            field_type = "BLANK FIELD" if is_blank_field else "EXPLICIT PLACEHOLDER"
+            
             # Replace in regular paragraphs
             for para in self.doc.paragraphs:
                 if placeholder in para.text:
@@ -194,6 +197,10 @@ class DocumentHandler:
                                                 new_run.font.color.rgb = first_run_format['color']
                                         
                                         replaced_count += 1
+            
+            # Log result
+            if replaced_count == 0:
+                pass  # Silently return False for not found - will be logged by caller
             
             return replaced_count > 0
         except Exception as e:
