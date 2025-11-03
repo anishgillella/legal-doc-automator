@@ -513,16 +513,18 @@ DO NOT identify as fields:
 
 For EACH valid field you identify:
 1. Field name or label (e.g., "Name", "Email Address", "Company Name")
-2. Data type (email, address, string, date, currency, phone, number, url, signature, etc.)
-3. Natural question to ask the user
-4. Example value
-5. Mark as NOT required (all fields are optional)
+2. The ACTUAL placeholder text as it appears in the document (e.g., "[COMPANY]", "_name_", "Name: ____")
+3. Data type (email, address, string, date, currency, phone, number, url, signature, etc.)
+4. Natural question to ask the user
+5. Example value
+6. Mark as NOT required (all fields are optional)
 
-Return as JSON array:
+Return as JSON array with EXACT placeholder text from document:
 [
   {{
     "field_name": "investor_name",
     "field_label": "Name",
+    "placeholder_text": "[INVESTOR NAME]",
     "data_type": "string",
     "suggested_question": "What is the investor's full name?",
     "example": "John Smith",
@@ -531,7 +533,7 @@ Return as JSON array:
   }}
 ]
 
-Be selective and only identify true placeholders/form fields, not random text."""
+CRITICAL: Include the EXACT placeholder text as written in the document!"""
 
         try:
             response = self._call_openrouter(prompt)
@@ -558,8 +560,15 @@ Be selective and only identify true placeholders/form fields, not random text.""
                 # Use field_name if available, otherwise use field_label
                 field_id = data.get('field_name', data.get('field_label', '').lower().replace(' ', '_'))
                 
+                # Check if LLM provided the actual placeholder text from the document
+                actual_placeholder = data.get('placeholder_text') or data.get('actual_placeholder')
+                
+                # If no explicit placeholder provided, create one (fallback for LLM that don't provide it)
+                if not actual_placeholder:
+                    actual_placeholder = f"[{field_id}]"
+                
                 analysis = PlaceholderAnalysis(
-                    placeholder_text=f"[{field_id}]",
+                    placeholder_text=actual_placeholder,  # Use actual placeholder from document
                     placeholder_name=field_id,
                     data_type=data.get('data_type', 'string'),
                     description=data.get('description', data.get('field_label', '')),
