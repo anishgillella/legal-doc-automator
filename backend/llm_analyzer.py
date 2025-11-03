@@ -498,7 +498,16 @@ Chunk: {chunk_name}
 Document:
 {chunk_text}
 
-IMPORTANT: Only identify fields that meet ONE of these criteria:
+IMPORTANT RULES FOR HANDLING DUPLICATE FIELDS:
+
+If you find duplicate field names (like multiple "Address:" fields):
+1. Return the EXACT placeholder text as it appears in document (e.g., "Address: ")
+2. Use the field_name to distinguish which one (e.g., "investor_address" vs "company_address")
+3. Optionally include the context in description (e.g., "Investor's address" vs "Company's address")
+
+The system will use field_name + position to match values to the correct field.
+
+Only identify fields that meet ONE of these criteria:
 1. Has explicit placeholder markers: [field], _field_, {{field}}, __field__, <field>, etc.
 2. Has blank spaces/underscores after the label: "Name: _____" or "Address:        "
 3. Is clearly a form field: "Name:", "Title:", "Email:", "Address:" (but NOT "Signature:" or "By:")
@@ -514,8 +523,8 @@ DO NOT identify as fields:
 ❌ Any text that's clearly document prose
 
 For EACH valid field you identify:
-1. Field name (e.g., "investor_name", "company_address")
-2. The ACTUAL placeholder text as it appears (e.g., "[Investor Name]", "Address: ____")
+1. Field name (e.g., "investor_name", "company_address") - MUST clearly show which section
+2. The EXACT placeholder text AS IT APPEARS IN DOCUMENT (e.g., "[Company Name]", "Address: ")
 3. Data type (email, address, string, date, currency, phone, number, url - NO "signature")
 4. Natural question to ask user
 5. Example value
@@ -523,12 +532,23 @@ For EACH valid field you identify:
 
 CRITICAL RULES:
 - Each field appears ONCE only - do not duplicate fields
-- Do not mix "investor" and "company" fields - keep them separate
+- Keep investor/company fields separate by using different field_names
 - Exclude ALL signature-related fields
-- Include the EXACT placeholder text from document
+- Return the EXACT placeholder text from document (don't modify it with prefixes)
+- Use field_name to distinguish duplicate placeholders (e.g., investor_address vs company_address)
 
 Return as JSON array:
 [
+  {{
+    "field_name": "company_email",
+    "field_label": "Email",
+    "placeholder_text": "Email: ",
+    "data_type": "email",
+    "suggested_question": "What is the company's email address?",
+    "example": "company@example.com",
+    "required": false,
+    "description": "The email address of the company"
+  }},
   {{
     "field_name": "investor_email",
     "field_label": "Email",

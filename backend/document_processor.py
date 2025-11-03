@@ -206,7 +206,18 @@ class DocumentProcessor:
                         pass
             
             # Replace remaining regular placeholders
+            # BUT: Skip if we have position-based keys for this placeholder (to avoid duplication)
+            placeholders_with_position_keys = set()
+            for key in position_based.keys():
+                placeholder_text = key.rsplit('__pos_', 1)[0]
+                placeholders_with_position_keys.add(placeholder_text)
+            
             for placeholder_text, value in regular.items():
+                # Skip if this placeholder has position-based keys (already filled)
+                if placeholder_text in placeholders_with_position_keys:
+                    print(f"  ⊘ Skipped:  {placeholder_text:40} (already filled with position-based keys)")
+                    continue
+                
                 success = self.doc_handler.replace_placeholder(placeholder_text, value)
                 if success:
                     total_replacements += 1

@@ -98,6 +98,20 @@ class DocumentHandler:
                 placeholder.endswith(':')
             )
             
+            # Extract context prefix if present (e.g., "INVESTOR: Address: " -> prefix="INVESTOR: ")
+            has_context_prefix = ': ' in placeholder
+            context_prefix = None
+            search_placeholder = placeholder
+            
+            if has_context_prefix and is_blank_field:
+                # Split on first occurrence of the context marker
+                parts = placeholder.split(': ', 1)
+                if len(parts) == 2:
+                    context_prefix = parts[0] + ': '
+                    field_label = parts[1]
+                    # Try exact match first
+                    search_placeholder = placeholder
+            
             # Debug: Show what we're looking for
             field_type = "BLANK FIELD" if is_blank_field else "EXPLICIT PLACEHOLDER"
             
@@ -220,6 +234,23 @@ class DocumentHandler:
             True if replacement was successful
         """
         try:
+            occurrence_count = 0
+            found_occurrences = 0
+            
+            # First, count total occurrences
+            for para in self.doc.paragraphs:
+                if placeholder in para.text:
+                    found_occurrences += para.text.count(placeholder)
+            
+            for table in self.doc.tables:
+                for row in table.rows:
+                    for cell in row.cells:
+                        if placeholder in cell.text:
+                            found_occurrences += cell.text.count(placeholder)
+            
+            if found_occurrences == 0:
+                return False
+            
             occurrence_count = 0
             
             # Search in paragraphs first
