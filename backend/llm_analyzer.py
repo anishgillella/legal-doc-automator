@@ -458,80 +458,36 @@ IMPORTANT: Return only this JSON array, no other text."""
     
     def _split_document_intelligent(self, document_text: str, chunk_size: int = 8000) -> List[tuple]:
         """
-        Split document intelligently by sections while maintaining context.
-        Returns list of (section_name, chunk_text) tuples.
+        Split document intelligently into pages.
+        Uses fixed chunk size as "pages" since we don't have explicit page breaks in text.
+        Each chunk represents approximately one page of content.
         """
         chunks = []
         
-        # Try to split by common section markers
-        sections = self._split_by_sections(document_text)
+        # Split into pages (~8000 chars per page, typical page of text)
+        lines = document_text.split('\n')
+        current_page = []
+        current_size = 0
+        page_num = 1
         
-        if len(sections) > 1:
-            # Document has clear sections, use them
-            for section_name, section_text in sections:
-                if len(section_text.strip()) > 100:
-                    chunks.append((section_name, section_text))
-        else:
-            # No clear sections, split by size with overlap
-            text = document_text
-            overlap = 500  # Character overlap between chunks
-            i = 0
-            chunk_num = 1
+        for line in lines:
+            line_size = len(line) + 1  # +1 for newline
             
-            while i < len(text):
-                chunk_end = min(i + chunk_size, len(text))
-                chunk = text[i:chunk_end]
-                chunks.append((f"Section {chunk_num}", chunk))
-                
-                # Move forward, but keep overlap
-                i = chunk_end - overlap
-                if i >= len(text):
-                    break
-                chunk_num += 1
+            # If adding this line exceeds page size and we have content, save as page
+            if current_size + line_size > chunk_size and current_page:
+                chunks.append((f"Page {page_num}", '\n'.join(current_page)))
+                current_page = []
+                current_size = 0
+                page_num += 1
+            
+            current_page.append(line)
+            current_size += line_size
+        
+        # Add final page
+        if current_page:
+            chunks.append((f"Page {page_num}", '\n'.join(current_page)))
         
         return chunks
-    
-    def _split_by_sections(self, document_text: str) -> List[tuple]:
-        """
-        Try to split document by section headers.
-        Looks for patterns like "COMPANY", "INVESTOR", etc.
-        """
-        import re as regex_module
-        
-        # Common SAFE document sections
-        section_markers = [
-            r'^([A-Z][A-Z\s]+):\s*$',  # "SECTION NAME:" on its own line
-            r'^([A-Z][A-Z\s]{5,})$',   # Multi-word ALL CAPS sections
-        ]
-        
-        sections = []
-        current_section = "Preamble"
-        current_content = []
-        
-        for line in document_text.split('\n'):
-            # Check if this is a section header
-            is_section = False
-            for marker in section_markers:
-                match = regex_module.match(marker, line.strip())
-                if match:
-                    # Save previous section
-                    if current_content:
-                        sections.append((current_section, '\n'.join(current_content)))
-                    
-                    # Start new section
-                    current_section = match.group(1).strip()
-                    current_content = []
-                    is_section = True
-                    break
-            
-            if not is_section:
-                current_content.append(line)
-        
-        # Add final section
-        if current_content:
-            sections.append((current_section, '\n'.join(current_content)))
-        
-        return sections if len(sections) > 1 else []
     
     def _detect_fields_in_chunk(self, chunk_text: str, chunk_name: str) -> List[PlaceholderAnalysis]:
         """Analyze a single chunk and detect fields in it"""
@@ -549,10 +505,19 @@ For each field, identify:
 4. Example value
 5. Whether it's required
 
-Include:
+Include ALL of these:
 - Fields with explicit placeholders like [field], _field_, {{field}}, etc.
 - Fields marked as blank lines like "Name: _____" or "Address: ___"
-- Any other fields that appear to need user input
+- Signature lines like "By:" or "Name:" that need signatures/names
+- Fields in signature sections at the end of documents
+- Fields in tables or structured layouts
+- Any other field that appears to need user input
+
+Be especially careful to find:
+✓ Signature sections (By:, Name:, Title:)
+✓ Address fields
+✓ Email fields
+✓ Any blank line with a label followed by spaces/underscores/tabs
 
 Return as JSON array:
 [
@@ -567,7 +532,7 @@ Return as JSON array:
   }}
 ]
 
-Be thorough and identify every field that needs filling."""
+Be thorough and identify EVERY field that needs filling, including signature blocks."""
 
         try:
             response = self._call_openrouter(prompt)
