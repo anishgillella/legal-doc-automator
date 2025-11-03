@@ -491,33 +491,32 @@ IMPORTANT: Return only this JSON array, no other text."""
     
     def _detect_fields_in_chunk(self, chunk_text: str, chunk_name: str) -> List[PlaceholderAnalysis]:
         """Analyze a single chunk and detect fields in it"""
-        prompt = f"""Analyze this document chunk and identify ALL fields that need to be filled in.
+        prompt = f"""Analyze this document chunk and identify ONLY ACTUAL FIELDS that need to be filled in.
 
 Chunk: {chunk_name}
 
 Document:
 {chunk_text}
 
-For each field, identify:
+IMPORTANT: Only identify fields that meet ONE of these criteria:
+1. Has explicit placeholder markers: [field], _field_, {{field}}, __field__, <field>, etc.
+2. Has blank spaces/underscores after the label: "Name: _____" or "Address:        "
+3. Is clearly a signature line or form field: "By:", "Signature:", "Date:"
+4. Is in a table cell that's empty or has placeholder text
+
+DO NOT identify as fields:
+❌ Random text with punctuation like "()" or other symbols that are part of sentences
+❌ Explanatory text that happens to have colons, like "Note: This is important"
+❌ Section headers or labels that aren't meant to be filled (like "1. Introduction:")
+❌ Words in parentheses that are just clarifications
+❌ Any text that's clearly part of the document prose
+
+For EACH valid field you identify:
 1. Field name or label (e.g., "Name", "Email Address", "Company Name")
-2. Data type (email, address, string, date, currency, phone, number, url, etc.)
+2. Data type (email, address, string, date, currency, phone, number, url, signature, etc.)
 3. Natural question to ask the user
 4. Example value
-5. Whether it's required
-
-Include ALL of these:
-- Fields with explicit placeholders like [field], _field_, {{field}}, etc.
-- Fields marked as blank lines like "Name: _____" or "Address: ___"
-- Signature lines like "By:" or "Name:" that need signatures/names
-- Fields in signature sections at the end of documents
-- Fields in tables or structured layouts
-- Any other field that appears to need user input
-
-Be especially careful to find:
-✓ Signature sections (By:, Name:, Title:)
-✓ Address fields
-✓ Email fields
-✓ Any blank line with a label followed by spaces/underscores/tabs
+5. Mark as NOT required (all fields are optional)
 
 Return as JSON array:
 [
@@ -527,12 +526,12 @@ Return as JSON array:
     "data_type": "string",
     "suggested_question": "What is the investor's full name?",
     "example": "John Smith",
-    "required": true,
+    "required": false,
     "description": "The full name of the investor"
   }}
 ]
 
-Be thorough and identify EVERY field that needs filling, including signature blocks."""
+Be selective and only identify true placeholders/form fields, not random text."""
 
         try:
             response = self._call_openrouter(prompt)
@@ -566,7 +565,7 @@ Be thorough and identify EVERY field that needs filling, including signature blo
                     description=data.get('description', data.get('field_label', '')),
                     suggested_question=data.get('suggested_question', f"What is the {data.get('field_label', 'field').lower()}?"),
                     example=data.get('example', ''),
-                    required=data.get('required', True),
+                    required=False,  # All fields are non-mandatory
                     validation_hint=None
                 )
                 analyses.append(analysis)
