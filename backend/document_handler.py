@@ -281,92 +281,89 @@ class DocumentHandler:
     def replace_placeholder_in_section(self, placeholder: str, value: str, section_keyword: Optional[str] = None) -> bool:
         """
         Replace a placeholder only in a specific section of the document.
-        Useful for duplicate placeholders like "Address:" in company vs investor sections.
+        Counts occurrences within the section to find the right one.
         
         Args:
             placeholder: The placeholder text to find (e.g., "Address: ")
             value: The replacement value
-            section_keyword: Optional keyword to identify the section (e.g., "INVESTOR", "COMPANY")
+            section_keyword: Section identifier (e.g., "investor", "company")
         
         Returns:
             True if replacement was successful
         """
         try:
-            replaced_count = 0
-            found_section = False
-            
             # Detect if this is a blank field placeholder
             is_blank_field = (
                 (': ' in placeholder and placeholder.endswith(': ')) or
                 placeholder.endswith(':')
             )
             
-            # Search in paragraphs
-            for i, para in enumerate(self.doc.paragraphs):
-                # Check if we're in the right section
-                if section_keyword:
-                    # Look backwards from current paragraph for section header
-                    in_section = False
-                    for j in range(max(0, i - 20), i):  # Check up to 20 paragraphs back
-                        if section_keyword.upper() in self.doc.paragraphs[j].text.upper():
-                            in_section = True
-                            break
-                    
-                    if not in_section:
-                        continue
-                
-                if placeholder in para.text:
-                    full_para_text = ''.join([run.text for run in para.runs])
-                    
-                    if placeholder in full_para_text:
-                        # For blank fields, replace ONLY the blank part after label
-                        if is_blank_field:
-                            # Find label position and keep it, discard everything after
-                            label_pos = full_para_text.find(placeholder)
-                            if label_pos != -1:
-                                new_text = full_para_text[:label_pos + len(placeholder)] + value
-                            else:
-                                continue
-                        else:
-                            # For explicit placeholders, replace the whole placeholder
-                            new_text = full_para_text.replace(placeholder, value)
-                        
-                        # Get formatting from first run
-                        first_run_format = None
-                        if para.runs:
-                            first_run = para.runs[0]
-                            first_run_format = {
-                                'bold': first_run.bold,
-                                'italic': first_run.italic,
-                                'font_name': first_run.font.name,
-                                'font_size': first_run.font.size,
-                                'color': first_run.font.color.rgb if first_run.font.color and first_run.font.color.rgb else None
-                            }
-                        
-                        # Clear all runs
-                        for run in para.runs:
-                            r = run._element
-                            r.getparent().remove(r)
-                        
-                        # Add new run with replaced text
-                        new_run = para.add_run(new_text)
-                        
-                        # Apply preserved formatting
-                        if first_run_format:
-                            new_run.bold = first_run_format['bold']
-                            new_run.italic = first_run_format['italic']
-                            if first_run_format['font_name']:
-                                new_run.font.name = first_run_format['font_name']
-                            if first_run_format['font_size']:
-                                new_run.font.size = first_run_format['font_size']
-                            if first_run_format['color']:
-                                new_run.font.color.rgb = first_run_format['color']
-                        
-                        replaced_count += 1
-                        found_section = True
-                        break  # Only replace first occurrence in section
+            if not section_keyword:
+                # No section keyword, just use regular replacement
+                return self.replace_placeholder(placeholder, value)
             
-            return replaced_count > 0
+            # Find the section start
+            section_start_para = None
+            for i, para in enumerate(self.doc.paragraphs):
+                if section_keyword.upper() in para.text.upper():
+                    section_start_para = i
+                    break
+            
+            if section_start_para is None:
+                # Section not found, use regular replacement
+                return self.replace_placeholder(placeholder, value)
+            
+            # Find first occurrence of placeholder AFTER section start
+            for i in range(section_start_para, len(self.doc.paragraphs)):
+                para = self.doc.paragraphs[i]
+                full_para_text = ''.join([run.text for run in para.runs])
+                
+                if placeholder in full_para_text:
+                    # Found it! Now replace
+                    if is_blank_field:
+                        # For blank fields: keep label, replace blank part
+                        label_pos = full_para_text.find(placeholder)
+                        if label_pos != -1:
+                            new_text = full_para_text[:label_pos + len(placeholder)] + value
+                        else:
+                            continue
+                    else:
+                        # For explicit placeholders: replace entire placeholder
+                        new_text = full_para_text.replace(placeholder, value, 1)
+                    
+                    # Write back
+                    for run in para.runs:
+                        r = run._element
+                        r.getparent().remove(r)
+                    
+                    para.add_run(new_text)
+                    return True
+            
+            # Also check in tables
+            for table in self.doc.tables:
+                for row in table.rows:
+                    for cell in row.cells:
+                        for para in cell.paragraphs:
+                            full_para_text = ''.join([run.text for run in para.runs])
+                            
+                            if placeholder in full_para_text:
+                                if is_blank_field:
+                                    label_pos = full_para_text.find(placeholder)
+                                    if label_pos != -1:
+                                        new_text = full_para_text[:label_pos + len(placeholder)] + value
+                                    else:
+                                        continue
+                                else:
+                                    new_text = full_para_text.replace(placeholder, value, 1)
+                                
+                                for run in para.runs:
+                                    r = run._element
+                                    r.getparent().remove(r)
+                                
+                                para.add_run(new_text)
+                                return True
+            
+            return False
         except Exception as e:
             print(f"Error in section-aware replacement: {e}")
             return False
