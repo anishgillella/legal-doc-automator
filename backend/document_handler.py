@@ -319,9 +319,14 @@ class DocumentHandler:
                     full_para_text = ''.join([run.text for run in para.runs])
                     
                     if placeholder in full_para_text:
-                        # For blank fields, only add value after the label
+                        # For blank fields, replace ONLY the blank part after label
                         if is_blank_field:
-                            new_text = full_para_text.replace(placeholder, placeholder + value)
+                            # Find label position and keep it, discard everything after
+                            label_pos = full_para_text.find(placeholder)
+                            if label_pos != -1:
+                                new_text = full_para_text[:label_pos + len(placeholder)] + value
+                            else:
+                                continue
                         else:
                             # For explicit placeholders, replace the whole placeholder
                             new_text = full_para_text.replace(placeholder, value)
