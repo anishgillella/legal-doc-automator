@@ -561,8 +561,22 @@ Return as JSON array:
             analyses = self._parse_detect_all_fields_response(response)
             return analyses
         except Exception as e:
-            print(f"⚠ Error analyzing chunk '{chunk_name}': {e}")
-            return []
+            # Retry once for transient network errors
+            error_str = str(e).lower()
+            if any(x in error_str for x in ['connection', 'timeout', 'broken pipe', 'reset by peer', 'invalidchunklength']):
+                print(f"⚠ Network error, retrying chunk '{chunk_name}'...")
+                try:
+                    import time
+                    time.sleep(1)  # Wait a second before retry
+                    response = self._call_openrouter(prompt)
+                    analyses = self._parse_detect_all_fields_response(response)
+                    return analyses
+                except Exception as retry_error:
+                    print(f"⚠ Retry failed for chunk '{chunk_name}': {retry_error}")
+                    return []
+            else:
+                print(f"⚠ Error analyzing chunk '{chunk_name}': {e}")
+                return []
     
     def _parse_detect_all_fields_response(self, response: str) -> List[PlaceholderAnalysis]:
         """Parse LLM response for detect_all_fields"""
