@@ -218,6 +218,7 @@ class DocumentProcessor:
                     print(f"  ⊘ Skipped:  {placeholder_text:40} (already filled with position-based keys)")
                     continue
                 
+                # Simple replacement - handler will decide what to do based on type
                 success = self.doc_handler.replace_placeholder(placeholder_text, value)
                 if success:
                     total_replacements += 1
