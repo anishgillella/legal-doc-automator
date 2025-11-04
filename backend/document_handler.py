@@ -88,8 +88,15 @@ class DocumentHandler:
         try:
             replaced_count = 0
             
-            # Determine type: explicit [placeholder] or blank field (ends with :, space, or underscore)
-            is_explicit_placeholder = placeholder.startswith('[') and placeholder.endswith(']')
+            # Determine type: explicit placeholder or blank field
+            # Explicit: [text], {text}, (text), _____, etc - replace ENTIRE placeholder
+            # Blank: ends with : or space - replace only the blank part, keep label
+            is_explicit_placeholder = (
+                (placeholder.startswith('[') and placeholder.endswith(']')) or
+                (placeholder.startswith('{') and placeholder.endswith('}')) or
+                (placeholder.startswith('(') and placeholder.endswith(')')) or
+                '_' in placeholder  # Underscores are explicit
+            )
             is_blank_field = placeholder.endswith(': ') or placeholder.endswith(':')
             
             # Build list of patterns to try (handle whitespace variations)
@@ -178,10 +185,15 @@ class DocumentHandler:
             True if replacement was successful
         """
         try:
-            # Determine type
-            is_explicit_placeholder = placeholder.startswith('[') and placeholder.endswith(']')
+            # Determine type - handle all placeholder types
+            is_explicit_placeholder = (
+                (placeholder.startswith('[') and placeholder.endswith(']')) or
+                (placeholder.startswith('{') and placeholder.endswith('}')) or
+                (placeholder.startswith('(') and placeholder.endswith(')')) or
+                '_' in placeholder  # Underscores
+            )
             is_blank_field = placeholder.endswith(': ') or placeholder.endswith(':')
-            
+
             # Build patterns
             patterns_to_try = [placeholder]
             if is_blank_field:
