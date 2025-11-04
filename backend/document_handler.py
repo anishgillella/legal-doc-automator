@@ -302,10 +302,15 @@ class DocumentHandler:
                 # No section keyword, just use regular replacement
                 return self.replace_placeholder(placeholder, value)
             
-            # Find the section start
+            # Find the LAST section header with this keyword
+            # (section headers are at the END of the document, not scattered throughout)
             section_start_para = None
-            for i, para in enumerate(self.doc.paragraphs):
-                if section_keyword.upper() in para.text.upper():
+            for i in range(len(self.doc.paragraphs) - 1, -1, -1):  # Search backwards!
+                para_text = self.doc.paragraphs[i].text.upper()
+                # Look for isolated keyword or with colons (like "INVESTOR:")
+                if (section_keyword.upper() == para_text.strip() or 
+                    section_keyword.upper() + ':' in para_text or
+                    para_text.startswith(section_keyword.upper() + ':')):
                     section_start_para = i
                     break
             
