@@ -86,19 +86,26 @@ class DocumentProcessor:
             "placeholders": placeholders_data
         }
         
-        # Step 3: Analyze with LLM (optional)
+        # Step 3: Analyze with LLM (optional) - LLM-FIRST approach
         if analyze_with_llm:
             try:
                 self.llm_analyzer = LLMAnalyzer()
                 
-                # Use new semantic grouping approach:
-                # Send ALL placeholders + full document to LLM
-                # LLM identifies which are duplicates and groups them
-                # Returns ONE question per unique semantic group
-                self.placeholder_analyses = self.llm_analyzer.group_placeholders_by_semantic_meaning(
-                    placeholders_data,
-                    self.full_text  # Full document context
-                )
+                # TRY LLM-FIRST: Ask LLM to detect ALL fields comprehensively
+                print("🔍 Attempting LLM-first field detection...")
+                llm_detected_fields = self.llm_analyzer.detect_all_fields(self.full_text)
+                
+                if llm_detected_fields:
+                    # LLM successfully detected all fields
+                    print(f"✓ LLM detected {len(llm_detected_fields)} fields")
+                    self.placeholder_analyses = llm_detected_fields
+                else:
+                    # LLM detected nothing, fall back to regex+heuristic based analysis
+                    print("⚠ LLM detected no fields, using regex+heuristic detection...")
+                    self.placeholder_analyses = self.llm_analyzer.group_placeholders_by_semantic_meaning(
+                        placeholders_data,
+                        self.full_text
+                    )
                 
                 # Convert analyses to dict format
                 analyses_data = [
@@ -121,7 +128,7 @@ class DocumentProcessor:
             except Exception as e:
                 result['error_analyzing'] = str(e)
                 result['analyzed'] = False
-                print(f"Warning: LLM semantic grouping failed: {e}")
+                print(f"Warning: LLM analysis failed: {e}")
         
         return result
     
@@ -159,54 +166,97 @@ class DocumentProcessor:
                 print("Failed to load document")
                 return False, ""
             
-            # Separate position-based keys from regular keys
-            position_based = {}
-            regular = {}
+            total_replacements = 0
+            
+            # Separate different types of keys
+            field_name_keys = {}  # field_name -> value
+            placeholder_keys = {}  # placeholder_text -> value
+            position_based = {} # placeholder__pos_N -> value
             
             for key, value in values.items():
                 if '__pos_' in key:
                     position_based[key] = value
+                elif key in ['company_address', 'investor_address', 'company_email', 'investor_email', 
+                             'company_name', 'investor_name', 'company_title', 'investor_title',
+                             'purchase_amount', 'post_money_valuation_cap', 'date_of_safe', 
+                             'state_of_incorporation', 'company_representative_name', 'company_representative_title',
+                             'investor_signature', 'governing_law_jurisdiction']:
+                    # This is a field name
+                    field_name_keys[key] = value
                 else:
-                    regular[key] = value
+                    # This is a placeholder text
+                    placeholder_keys[key] = value
             
-            total_replacements = 0
+            # Priority 1: Use field names with context-aware replacement
+            if field_name_keys:
+                print(f"✓ Using {len(field_name_keys)} field-name-based replacements (context-aware)\n")
+                # Use context-aware replacement based on field name
+                for field_name, value in field_name_keys.items():
+                    # Determine the section keyword based on field name
+                    section_keyword = 'investor' if 'investor' in field_name else 'company'
+                    
+                    # Guess the placeholder based on field name
+                    if 'address' in field_name:
+                        placeholders_to_try = ['Address: ', 'Address:\t', 'Address:  ']
+                    elif 'email' in field_name:
+                        placeholders_to_try = ['Email: ', 'Email:\t', 'Email:  ']
+                    elif 'title' in field_name:
+                        placeholders_to_try = ['Title: ', 'Title:\t', 'Title:  ', '[title]', '[Title]']
+                    elif 'name' in field_name:
+                        placeholders_to_try = ['[name]', '[Name]', '[investor_name]', '[Investor Name]', '[company_name]', '[Company Name]', 'Name: ', 'Name:\t']
+                    else:
+                        placeholders_to_try = [field_name]
+                    
+                    # Try each placeholder
+                    for placeholder in placeholders_to_try:
+                        success = self.doc_handler.replace_placeholder_in_section(placeholder, value, section_keyword)
+                        if success:
+                            total_replacements += 1
+                            print(f"  ✓ Context: {field_name:30} → {value[:25]}")
+                            break
+                    else:
+                        print(f"  ✗ Failed: {field_name}")
+                
+                print()
             
-            # Replace position-based placeholders first (most specific)
-            for key, value in position_based.items():
-                # Extract placeholder text and position: "text__pos_0" -> ("text", 0)
-                placeholder_text = key.rsplit('__pos_', 1)[0]
-                try:
-                    position = int(key.rsplit('__pos_', 1)[1])
-                    success = self.doc_handler.replace_placeholder_at_position(placeholder_text, value, position)
+            # Priority 2: Position-based (fallback)
+            elif position_based:
+                print(f"✓ Using {len(position_based)} position-based replacements (fallback)\n")
+                for key, value in position_based.items():
+                    placeholder_text = key.rsplit('__pos_', 1)[0]
+                    try:
+                        position = int(key.rsplit('__pos_', 1)[1])
+                        success = self.doc_handler.replace_placeholder_at_position(placeholder_text, value, position)
+                        if success:
+                            total_replacements += 1
+                        else:
+                            success = self.doc_handler.replace_placeholder(placeholder_text, value)
+                            if success:
+                                total_replacements += 1
+                                print(f"  Fallback: Replaced {key}")
+                            else:
+                                print(f"  ✗ Failed: {key}")
+                    except Exception as e:
+                        print(f"  Error: {key}: {e}")
+                
+                print()
+            
+            # Priority 3: Plain placeholder text (backward compatibility)
+            else:
+                print(f"✓ Using {len(placeholder_keys)} placeholder-based replacements\n")
+                for placeholder_text, value in placeholder_keys.items():
+                    success = self.doc_handler.replace_placeholder(placeholder_text, value)
                     if success:
                         total_replacements += 1
+                        print(f"  ✓ Replaced: {placeholder_text:40} → {value[:25]}")
                     else:
-                        # Try regular replacement as fallback
-                        success = self.doc_handler.replace_placeholder(placeholder_text, value)
-                        if success:
-                            total_replacements += 1
-                            print(f"Fallback: Replaced {key} using regular method")
-                        else:
-                            print(f"Warning: Failed to replace {key}")
-                except Exception as e:
-                    print(f"Error with position-based replacement {key}: {e}")
-                    # Try regular replacement as fallback
-                    try:
-                        success = self.doc_handler.replace_placeholder(placeholder_text, value)
-                        if success:
-                            total_replacements += 1
-                    except:
-                        pass
+                        print(f"  ✗ Failed:   {placeholder_text}")
+                
+                print()
             
-            # Replace remaining regular placeholders
-            for placeholder_text, value in regular.items():
-                success = self.doc_handler.replace_placeholder(placeholder_text, value)
-                if success:
-                    total_replacements += 1
-                else:
-                    print(f"Warning: Failed to replace: {placeholder_text}")
-            
-            print(f"Successfully replaced {total_replacements}/{len(values)} placeholders")
+            print(f"\n{'='*80}")
+            print(f"RESULT: Successfully replaced {total_replacements}/{len(values)} placeholders")
+            print(f"{'='*80}\n")
             
             # Save to temporary file
             temp_dir = tempfile.gettempdir()

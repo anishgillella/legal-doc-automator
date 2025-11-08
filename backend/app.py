@@ -195,9 +195,13 @@ def fill_document():
             processor = DocumentProcessor(temp_path)
             
             # Debug: Log what we're trying to replace
-            print(f"Attempting to fill {len(values)} placeholders")
-            for key, val in list(values.items())[:3]:
-                print(f"  {key[:50]}: {val[:30] if len(val) > 30 else val}")
+            print(f"\n{'='*80}")
+            print(f"FILL OPERATION - Attempting to fill {len(values)} placeholders")
+            print(f"{'='*80}")
+            for key, val in values.items():
+                val_preview = val[:40] if len(val) > 40 else val
+                print(f"  Placeholder: {key:40} | Value: {val_preview}")
+            print(f"{'='*80}\n")
             
             success, output_path = processor.fill_placeholders(values)
             

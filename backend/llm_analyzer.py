@@ -400,6 +400,350 @@ IMPORTANT: Return only this JSON array, no other text."""
             return []
 
 
+    def detect_all_fields(self, document_text: str) -> List[PlaceholderAnalysis]:
+        """
+        LLM-first comprehensive field detection.
+        Send entire document to LLM and ask it to identify ALL fields that need filling.
+        This includes explicit placeholders AND blank fields in a single pass.
+        
+        Handles large documents by intelligent chunking:
+        - Documents < 10k chars: Send entire document
+        - Larger documents: Split by sections, analyze each, deduplicate
+        
+        Args:
+            document_text: The full document text
+        
+        Returns:
+            List of PlaceholderAnalysis objects for all detected fields
+        """
+        if len(document_text.strip()) < 100:
+            return []
+        
+        doc_length = len(document_text)
+        
+        # Strategy based on document size
+        if doc_length < 10000:
+            # Small document: send entire thing
+            print(f"📄 Document size: {doc_length} chars (small) - sending entire document")
+            return self._detect_fields_in_chunk(document_text, "Full Document")
+        else:
+            # Large document: split into intelligent chunks
+            print(f"📄 Document size: {doc_length} chars (large) - using intelligent chunking")
+            return self._detect_fields_with_chunking(document_text)
+    
+    def _detect_fields_with_chunking(self, document_text: str) -> List[PlaceholderAnalysis]:
+        """
+        Split large document intelligently and detect fields from all chunks.
+        Deduplicates results from multiple chunks.
+        """
+        chunks = self._split_document_intelligent(document_text)
+        print(f"📑 Split document into {len(chunks)} chunks for analysis")
+        
+        all_fields = []
+        seen_field_names = set()
+        
+        for i, (chunk_name, chunk_text) in enumerate(chunks, 1):
+            print(f"  Analyzing chunk {i}/{len(chunks)}: {chunk_name}")
+            
+            chunk_fields = self._detect_fields_in_chunk(chunk_text, chunk_name)
+            
+            # Add fields, skip duplicates based on field name
+            for field in chunk_fields:
+                if field.placeholder_name not in seen_field_names:
+                    all_fields.append(field)
+                    seen_field_names.add(field.placeholder_name)
+        
+        print(f"✓ Total unique fields detected: {len(all_fields)}")
+        return all_fields
+    
+    def _split_document_intelligent(self, document_text: str, chunk_size: int = 8000) -> List[tuple]:
+        """
+        Split document intelligently into pages.
+        Uses fixed chunk size as "pages" since we don't have explicit page breaks in text.
+        Each chunk represents approximately one page of content.
+        """
+        chunks = []
+        
+        # Split into pages (~8000 chars per page, typical page of text)
+        lines = document_text.split('\n')
+        current_page = []
+        current_size = 0
+        page_num = 1
+        
+        for line in lines:
+            line_size = len(line) + 1  # +1 for newline
+            
+            # If adding this line exceeds page size and we have content, save as page
+            if current_size + line_size > chunk_size and current_page:
+                chunks.append((f"Page {page_num}", '\n'.join(current_page)))
+                current_page = []
+                current_size = 0
+                page_num += 1
+            
+            current_page.append(line)
+            current_size += line_size
+        
+        # Add final page
+        if current_page:
+            chunks.append((f"Page {page_num}", '\n'.join(current_page)))
+        
+        return chunks
+    
+    def _detect_fields_in_chunk(self, chunk_text: str, chunk_name: str) -> List[PlaceholderAnalysis]:
+        """Analyze a single chunk and detect fields in it"""
+        prompt = f"""Analyze this document chunk and identify ONLY ACTUAL FIELDS that need to be filled in.
+
+Chunk: {chunk_name}
+
+Document:
+{chunk_text}
+
+IDENTIFY ALL PLACEHOLDER TYPES:
+
+Explicit placeholders (replace entire placeholder):
+- [field name] - Square brackets
+- {{field name}} - Curly braces  
+- (field name) - Parentheses
+- _____  - Underscores
+- ALLCAPS_PLACEHOLDER
+
+Blank fields (keep label, replace blank part):
+- "Label: _____" - Label with underscores
+- "Label:        " - Label with spaces
+- "Label: " - Label with blank
+- "Name:" - Just colon (blank to fill)
+
+Only identify fields that meet ONE of these criteria:
+1. Has explicit placeholder markers: [field], {{field}}, (field), ___, etc.
+2. Has blank spaces/underscores after the label: "Name: _____" or "Address:        "
+3. Is clearly a form field: "Name:", "Title:", "Email:", "Address:"
+4. Is in a table cell that's empty or has placeholder text
+
+DO NOT identify as fields:
+❌ Parentheses that are part of legal text like (a), (b), (i), (ii) - these are clause numbers!
+❌ Parentheses used for explanations like "this (not that)" in prose
+❌ Signature fields ("Signature:", "By:", "Sign here", "Signed by")
+❌ Explanatory text like "Note: This is important"
+❌ Section headers like "1. Introduction:"
+❌ Words in parentheses that are just clarifications
+❌ Random text that's clearly part of document prose
+
+For EACH valid field you identify:
+1. Field name (e.g., "investor_name", "company_address")
+2. The EXACT placeholder text AS IT APPEARS (e.g., "[Company Name]", "Address: ", "$[_____________]")
+3. Data type (email, address, string, date, currency, phone, number, url)
+4. Natural question to ask user
+5. Example value
+6. Mark as NOT required
+
+CRITICAL RULES:
+- Each field appears ONCE only
+- Keep investor/company fields separate by field_name
+- Return the EXACT placeholder text from document (don't modify it)
+- Use field_name to distinguish duplicate placeholders (e.g., investor_address vs company_address)
+
+Return as JSON array:
+[
+  {{
+    "field_name": "company_email",
+    "field_label": "Email",
+    "placeholder_text": "Email: ",
+    "data_type": "email",
+    "suggested_question": "What is the company's email address?",
+    "example": "company@example.com",
+    "required": false,
+    "description": "The email address of the company"
+  }}
+]"""
+
+        try:
+            response = self._call_openrouter(prompt)
+            analyses = self._parse_detect_all_fields_response(response)
+            return analyses
+        except Exception as e:
+            # Retry once for transient network errors
+            error_str = str(e).lower()
+            if any(x in error_str for x in ['connection', 'timeout', 'broken pipe', 'reset by peer', 'invalidchunklength']):
+                print(f"⚠ Network error, retrying chunk '{chunk_name}'...")
+                try:
+                    import time
+                    time.sleep(1)  # Wait a second before retry
+                    response = self._call_openrouter(prompt)
+                    analyses = self._parse_detect_all_fields_response(response)
+                    return analyses
+                except Exception as retry_error:
+                    print(f"⚠ Retry failed for chunk '{chunk_name}': {retry_error}")
+                    return []
+            else:
+                print(f"⚠ Error analyzing chunk '{chunk_name}': {e}")
+                return []
+    
+    def _parse_detect_all_fields_response(self, response: str) -> List[PlaceholderAnalysis]:
+        """Parse LLM response for detect_all_fields"""
+        try:
+            import re as regex_module
+            json_match = regex_module.search(r'\[.*\]', response, regex_module.DOTALL)
+            if json_match:
+                json_str = json_match.group(0)
+            else:
+                json_str = response
+            
+            fields_data = json.loads(json_str)
+            analyses = []
+            
+            for data in fields_data:
+                # Use field_name if available, otherwise use field_label
+                field_id = data.get('field_name', data.get('field_label', '').lower().replace(' ', '_'))
+                
+                # Check if LLM provided the actual placeholder text from the document
+                actual_placeholder = data.get('placeholder_text') or data.get('actual_placeholder')
+                
+                # If no explicit placeholder provided, create one (fallback for LLM that don't provide it)
+                if not actual_placeholder:
+                    actual_placeholder = f"[{field_id}]"
+                
+                analysis = PlaceholderAnalysis(
+                    placeholder_text=actual_placeholder,  # Use actual placeholder from document
+                    placeholder_name=field_id,
+                    data_type=data.get('data_type', 'string'),
+                    description=data.get('description', data.get('field_label', '')),
+                    suggested_question=data.get('suggested_question', f"What is the {data.get('field_label', 'field').lower()}?"),
+                    example=data.get('example', ''),
+                    required=False,  # All fields are non-mandatory
+                    validation_hint=None
+                )
+                analyses.append(analysis)
+            
+            return analyses
+        except Exception as e:
+            print(f"Error parsing detect_all_fields response: {e}")
+            print(f"Response was: {response[:200]}")
+            return []
+
+    def analyze_blank_fields(self, blank_fields: List[Dict], document_context: str) -> List[PlaceholderAnalysis]:
+        """
+        Analyze blank fields (Label: ____ patterns) to understand what data they need.
+        Uses LLM to infer data types and generate questions.
+        
+        Args:
+            blank_fields: List of detected blank fields with their labels
+            document_context: Context from the document
+        
+        Returns:
+            List of PlaceholderAnalysis objects for blank fields
+        """
+        if not blank_fields:
+            return []
+        
+        # Build field list for LLM
+        fields_text = "\n".join([f["name"] for f in blank_fields])
+        
+        prompt = f"""You are analyzing blank fields in a SAFE (Simple Agreement for Future Equity) document.
+
+Detected fields:
+{fields_text}
+
+Document context (first 500 chars):
+{document_context[:500]}
+
+For each field, determine:
+1. Data type (email, address, string, date, currency, phone, number, url, etc.)
+2. Natural question to ask the user
+3. Example value
+4. Whether it's required
+
+Return as JSON array with this structure:
+[
+  {{
+    "field_name": "address",
+    "data_type": "address",
+    "suggested_question": "What is the investor's mailing address?",
+    "example": "123 Main St, San Francisco, CA 94102",
+    "required": true,
+    "description": "The physical address of the investor"
+  }}
+]
+
+Be concise and practical."""
+
+        try:
+            response = self._call_openrouter(prompt)
+            analyses = self._parse_blank_field_response(response, blank_fields)
+            return analyses
+        except Exception as e:
+            print(f"Error analyzing blank fields with LLM: {e}")
+            return self._fallback_blank_field_analysis(blank_fields)
+    
+    def _parse_blank_field_response(self, response: str, blank_fields: List[Dict]) -> List[PlaceholderAnalysis]:
+        """Parse LLM response for blank field analysis"""
+        try:
+            import re as regex_module
+            json_match = regex_module.search(r'\[.*\]', response, regex_module.DOTALL)
+            if json_match:
+                json_str = json_match.group(0)
+            else:
+                json_str = response
+            
+            fields_data = json.loads(json_str)
+            analyses = []
+            
+            for data in fields_data:
+                analysis = PlaceholderAnalysis(
+                    placeholder_text=f"[{data.get('field_name', '')}]",
+                    placeholder_name=data.get('field_name', '').lower().replace(' ', '_'),
+                    data_type=data.get('data_type', 'string'),
+                    description=data.get('description', data.get('field_name', '')),
+                    suggested_question=data.get('suggested_question', f"What is the {data.get('field_name', '')}?"),
+                    example=data.get('example', ''),
+                    required=data.get('required', True),
+                    validation_hint=None
+                )
+                analyses.append(analysis)
+            
+            return analyses
+        except Exception as e:
+            print(f"Error parsing blank field response: {e}")
+            return self._fallback_blank_field_analysis(blank_fields)
+    
+    def _fallback_blank_field_analysis(self, blank_fields: List[Dict]) -> List[PlaceholderAnalysis]:
+        """Fallback analysis for blank fields using heuristics"""
+        analyses = []
+        
+        type_hints = {
+            'email': 'email',
+            'address': 'address',
+            'name': 'string',
+            'phone': 'phone',
+            'date': 'date',
+            'signature': 'string',
+            'title': 'string'
+        }
+        
+        for field in blank_fields:
+            field_name = field['name'].lower()
+            
+            # Try to infer type from field name
+            inferred_type = 'string'
+            for hint, data_type in type_hints.items():
+                if hint in field_name:
+                    inferred_type = data_type
+                    break
+            
+            analysis = PlaceholderAnalysis(
+                placeholder_text=f"[{field['name']}]",
+                placeholder_name=field['name'].lower().replace(' ', '_'),
+                data_type=inferred_type,
+                description=f"Field: {field['name']}",
+                suggested_question=f"What is the {field['name'].lower()}?",
+                example=f"[Example {field['name']}]",
+                required=True,
+                validation_hint=None
+            )
+            analyses.append(analysis)
+        
+        return analyses
+
+
 def analyze_placeholders(placeholders: List[Dict], context: str, 
                         api_key: Optional[str] = None) -> List[PlaceholderAnalysis]:
     """

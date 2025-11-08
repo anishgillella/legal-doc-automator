@@ -33,16 +33,18 @@ export default function ReviewPage() {
       console.log('Starting download with file:', state.file.name);
       console.log('Total values to fill:', Object.keys(state.values).length);
 
-      // Map values - send both ID-based and text-based for flexibility
+      // Map values - send with field names for proper context
       const valuesForBackend: Record<string, string> = {};
-      state.placeholders.forEach((p, idx) => {
+      
+      state.placeholders.forEach((p) => {
         const key = p.placeholder_id || p.placeholder_text;
         const value = state.values[key];
         if (value) {
-          // Send with placeholder_text as key (original format)
+          // Send value with field name so backend knows context
+          // Format: fieldname__value OR placeholder__value
+          valuesForBackend[p.placeholder_name] = value;
+          // Also keep original placeholder as key for backward compatibility
           valuesForBackend[p.placeholder_text] = value;
-          // Also send with position-based key for duplicates
-          valuesForBackend[`${p.placeholder_text}__pos_${idx}`] = value;
         }
       });
 

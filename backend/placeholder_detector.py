@@ -56,10 +56,16 @@ class PlaceholderDetector:
         # Regex-based detection (primary - gets 100% coverage)
         regex_placeholders = self._detect_with_regex(text)
         
-        # Sort by position
-        regex_placeholders.sort(key=lambda p: p.position)
+        # Also detect blank fields (Label: ____ patterns)
+        blank_field_placeholders = self._detect_blank_fields(text)
         
-        return regex_placeholders
+        # Combine both
+        all_placeholders = regex_placeholders + blank_field_placeholders
+        
+        # Sort by position
+        all_placeholders.sort(key=lambda p: p.position)
+        
+        return all_placeholders
     
     def _detect_with_regex(self, text: str) -> List[Placeholder]:
         """Detect placeholders using regex patterns"""
@@ -261,6 +267,36 @@ Document text:
         except Exception as e:
             # Silent fail on LLM - regex results are enough
             return []
+    
+    def _detect_blank_fields(self, text: str) -> List[Placeholder]:
+        """
+        Detect blank fields formatted as "Label: ____" patterns.
+        This is a heuristic and might not be perfect.
+        """
+        placeholders = []
+        # Look for patterns like "Label: ____" on lines
+        # Pattern: Start of line, optional whitespace, capitalized word(s), colon, underscores
+        for match in re.finditer(r'^(\s*)([A-Z][a-zA-Z\s]*?):\s+(_{2,}).*$', text, re.MULTILINE):
+            label_text = match.group(2).strip().lower()
+            
+            # Skip very short labels that are likely not field names
+            if len(label_text) < 2:
+                continue
+            
+            placeholder = Placeholder(
+                text=match.group(0),  # Full line
+                name=label_text.replace(' ', '_'),
+                format_type='blank_field',
+                position=match.start(),
+                end_position=match.end(),
+                detected_by='heuristic'
+            )
+            
+            # Check for duplicates
+            if not self._duplicate_exists(placeholder, placeholders):
+                placeholders.append(placeholder)
+        
+        return placeholders
     
     def _duplicate_exists(self, placeholder: Placeholder, existing: List[Placeholder]) -> bool:
         """Check if a placeholder already exists in the list"""
