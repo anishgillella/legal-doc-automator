@@ -60,16 +60,28 @@ class DocumentProcessor:
         
         # Convert to dict format for JSON serialization
         placeholders_data = []
+        # Group placeholders by text to show occurrences
+        placeholder_groups = {}
         for idx, p in enumerate(self.placeholders):
-            placeholders_data.append({
+            placeholder_groups.setdefault(p.text, []).append({
                 'index': idx,
                 'text': p.text,
                 'name': p.name,
                 'format': p.format_type,
                 'position': p.position,
                 'end_position': p.end_position,
-                'detected_by': p.detected_by
+                'detected_by': p.detected_by,
+                'position_index': len(placeholder_groups.get(p.text, []))  # 0-based index for this specific placeholder text
             })
+        
+        # Flatten for backward compatibility
+        for group in placeholder_groups.values():
+            placeholders_data.extend(group)
+        
+        # Add summary of occurrences
+        occurrences_summary = {}
+        for text, occurrences in placeholder_groups.items():
+            occurrences_summary[text] = len(occurrences)
         
         result = {
             "success": True,
@@ -77,7 +89,8 @@ class DocumentProcessor:
             "document_path": self.doc_path,
             "text_length": len(self.full_text),
             "placeholder_count": len(self.placeholders),
-            "placeholders": placeholders_data
+            "placeholders": placeholders_data,
+            "occurrences_summary": occurrences_summary  # Shows how many times each placeholder appears
         }
         
         return result
@@ -99,6 +112,11 @@ class DocumentProcessor:
             if not self.doc_handler.load_document():
                 print("Failed to load document")
                 return False, ""
+            
+            # Ensure placeholders are detected (needed for counting occurrences)
+            if self.placeholders is None:
+                self.full_text = self.doc_handler.get_full_text()
+                self.placeholders = self.placeholder_detector.detect_placeholders(self.full_text)
             
             total_replacements = 0
             
@@ -138,15 +156,40 @@ class DocumentProcessor:
                 print()
             
             # Priority 2: Plain placeholder text replacements
+            # For placeholders that appear multiple times, replace ALL occurrences with the same value
             if placeholder_keys:
                 print(f"✓ Using {len(placeholder_keys)} placeholder-based replacements\n")
                 for placeholder_text, value in placeholder_keys.items():
-                    success = self.doc_handler.replace_placeholder(placeholder_text, value)
-                    if success:
-                        total_replacements += 1
-                        print(f"  ✓ Replaced: {placeholder_text:40} → {value[:25]}")
+                    # Count how many times this placeholder appears
+                    occurrences_count = sum(1 for p in self.placeholders if p.text == placeholder_text)
+                    
+                    if occurrences_count > 1:
+                        # Replace all occurrences one by one
+                        # IMPORTANT: Replace in reverse order (last to first) to avoid position shifts
+                        replaced_this_placeholder = 0
+                        for i in range(occurrences_count - 1, -1, -1):  # Reverse order: last occurrence first
+                            success = self.doc_handler.replace_placeholder_at_position(placeholder_text, value, i)
+                            if success:
+                                replaced_this_placeholder += 1
+                                total_replacements += 1
+                        
+                        if replaced_this_placeholder > 0:
+                            print(f"  ✓ Replaced: {placeholder_text:40} → {value[:25]} ({replaced_this_placeholder}/{occurrences_count} occurrences)")
+                        else:
+                            print(f"  ✗ Failed:   {placeholder_text} (0/{occurrences_count} occurrences)")
                     else:
-                        print(f"  ✗ Failed:   {placeholder_text}")
+                        # Single occurrence, use regular replacement
+                        success = self.doc_handler.replace_placeholder(placeholder_text, value)
+                        if success:
+                            total_replacements += 1
+                            print(f"  ✓ Replaced: {placeholder_text:40} → {value[:25]}")
+                        else:
+                            # Debug: check if placeholder exists
+                            matching_placeholders = [p for p in self.placeholders if p.text == placeholder_text]
+                            if matching_placeholders:
+                                print(f"  ✗ Failed:   {placeholder_text} (found {len(matching_placeholders)} occurrences but replacement failed)")
+                            else:
+                                print(f"  ✗ Failed:   {placeholder_text} (not found in document)")
                 
                 print()
             
