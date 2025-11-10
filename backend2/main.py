@@ -68,6 +68,32 @@ def process_document(doc_path: str):
     placeholders_count = result.get('placeholder_count', 0)
     print(f"✓ Found {placeholders_count} placeholders using python-docx\n")
     
+    # Log what python-docx extracted
+    print("=" * 60)
+    print("PYTHON-DOCX OUTPUT:")
+    print("=" * 60)
+    print(f"\n📄 Extracted Text Length: {result.get('text_length', 0)} characters")
+    print(f"\n📄 Extracted Text (first 500 chars):")
+    print("-" * 60)
+    full_text_preview = processor.full_text[:500] if processor.full_text else ""
+    print(full_text_preview)
+    if len(processor.full_text) > 500:
+        print(f"... (truncated, total {len(processor.full_text)} chars)")
+    print("-" * 60)
+    
+    print(f"\n🔍 Detected Placeholders ({placeholders_count}):")
+    print("-" * 60)
+    placeholders_data = result.get('placeholders', [])
+    for idx, ph in enumerate(placeholders_data, 1):
+        print(f"  {idx}. Text: '{ph['text']}'")
+        print(f"     Name: {ph['name']}")
+        print(f"     Format: {ph['format']}")
+        print(f"     Position: {ph['position']}-{ph['end_position']}")
+        print(f"     Detected by: {ph['detected_by']}")
+        print()
+    print("=" * 60)
+    print()
+    
     if placeholders_count == 0:
         print("No placeholders detected. Document may already be filled or use a different format.")
         return
@@ -78,8 +104,9 @@ def process_document(doc_path: str):
         llm_analyzer = LLMAnalyzer()
         full_text = processor.full_text
         
-        # Use LLM to detect and analyze all fields
-        analyses = llm_analyzer.detect_all_fields(full_text)
+        # Use LLM to analyze regex-detected placeholders with context
+        placeholders_data = result.get('placeholders', [])
+        analyses = llm_analyzer.analyze_placeholders_with_context(full_text, placeholders_data)
         
         if not analyses:
             print("⚠ LLM did not detect fields. Using regex-detected placeholders...")
@@ -100,6 +127,24 @@ def process_document(doc_path: str):
                 ))
         
         print(f"✓ LLM analyzed {len(analyses)} unique fields\n")
+        
+        # Log what LLM detected
+        print("=" * 60)
+        print("LLM OUTPUT:")
+        print("=" * 60)
+        print(f"\n🤖 LLM Detected Fields ({len(analyses)}):")
+        print("-" * 60)
+        for idx, analysis in enumerate(analyses, 1):
+            print(f"  {idx}. Placeholder Text: '{analysis.placeholder_text}'")
+            print(f"     Field Name: {analysis.placeholder_name}")
+            print(f"     Data Type: {analysis.data_type}")
+            print(f"     Description: {analysis.description}")
+            print(f"     Question: {analysis.suggested_question}")
+            print(f"     Example: {analysis.example}")
+            print(f"     Required: {analysis.required}")
+            print()
+        print("=" * 60)
+        print()
         
     except Exception as e:
         print(f"⚠ LLM analysis failed: {e}")
@@ -124,6 +169,14 @@ def process_document(doc_path: str):
     print("Step 3: Collecting user answers...")
     print(f"\nYou'll be asked {len(analyses)} questions. Answer each one or type 'skip' to leave blank.\n")
     
+    # Check for duplicate placeholder texts with different field names
+    placeholder_text_counts = {}
+    for analysis in analyses:
+        text = analysis.placeholder_text
+        if text not in placeholder_text_counts:
+            placeholder_text_counts[text] = []
+        placeholder_text_counts[text].append(analysis.placeholder_name)
+    
     values = {}
     for i, analysis in enumerate(analyses, 1):
         print(f"\n[{i}/{len(analyses)}]")
@@ -134,8 +187,15 @@ def process_document(doc_path: str):
         )
         
         if answer:
-            # Map answer to placeholder text
-            values[analysis.placeholder_text] = answer
+            # If multiple analyses have the same placeholder_text but different field_names,
+            # use composite key to distinguish them
+            if len(placeholder_text_counts[analysis.placeholder_text]) > 1:
+                # Use composite key: placeholder_text__field_name
+                key = f"{analysis.placeholder_text}__field_{analysis.placeholder_name}"
+            else:
+                # Single occurrence, use placeholder text directly
+                key = analysis.placeholder_text
+            values[key] = answer
     
     if not values:
         print("\n⚠ No values provided. Exiting without filling document.")

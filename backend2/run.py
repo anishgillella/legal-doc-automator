@@ -10,7 +10,7 @@ def main():
     """Run the Flask API server"""
     # Set default port if not specified
     if 'API_PORT' not in os.environ:
-        os.environ['API_PORT'] = '5000'
+        os.environ['API_PORT'] = '5001'
     
     # Set default environment if not specified
     if 'ENVIRONMENT' not in os.environ:
