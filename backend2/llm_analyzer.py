@@ -1,6 +1,7 @@
 import requests
 import json
 import os
+import sys
 from typing import List, Dict, Optional
 from dotenv import load_dotenv
 from dataclasses import dataclass
@@ -34,7 +35,10 @@ class LLMAnalyzer:
         self.base_url = "https://openrouter.ai/api/v1"
         
         if not self.api_key:
-            raise ValueError("OpenRouter API key not found. Set OPENROUTER_API_KEY in .env")
+            # Don't raise error immediately - allow lazy initialization
+            # Error will be raised when trying to use the API
+            print("WARNING: OpenRouter API key not found. LLM features will be disabled.", file=sys.stderr)
+            print("Set OPENROUTER_API_KEY environment variable to enable LLM analysis.", file=sys.stderr)
     
     def analyze_placeholders_with_context(self, document_text: str, regex_placeholders: List[Dict]) -> List[PlaceholderAnalysis]:
         """
@@ -215,6 +219,11 @@ Return as JSON array:
         Returns:
             List of PlaceholderAnalysis objects
         """
+        # Check if API key is available
+        if not self.api_key:
+            print("ERROR: OpenRouter API key not found. Cannot perform LLM analysis.", file=sys.stderr)
+            raise ValueError("OpenRouter API key not found. Set OPENROUTER_API_KEY environment variable.")
+        
         # Build list of detected placeholders WITH CONTEXT for each occurrence
         # This is critical for distinguishing identical placeholders like [_____________] that represent different fields
         placeholders_list = ""

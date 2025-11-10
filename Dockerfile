@@ -43,4 +43,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 
 # Run with Gunicorn for production
 # Railway sets PORT automatically at runtime, so we use that
-CMD gunicorn --bind 0.0.0.0:${PORT:-5001} --workers 4 --timeout 120 --access-logfile - --error-logfile - app:app
+# Use shell form to expand PORT variable, fallback to 5001
+CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT:-5001} --workers 4 --timeout 120 --access-logfile - --error-logfile - app:app"]
