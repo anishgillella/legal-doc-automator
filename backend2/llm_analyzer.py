@@ -58,16 +58,16 @@ class LLMAnalyzer:
                 placeholder_groups[text] = []
             placeholder_groups[text].append(ph)
         
-        # Extract context around each placeholder occurrence (50 chars before and after)
+        # Extract context around each placeholder occurrence (100 chars before and after for better context)
         placeholder_contexts = []
         for text, occurrences in placeholder_groups.items():
             for occ in occurrences:
                 pos = occ.get('position', 0)
                 end_pos = occ.get('end_position', pos + len(text))
                 
-                # Extract context (50 chars before and after for better context matching)
-                context_start = max(0, pos - 50)
-                context_end = min(len(document_text), end_pos + 50)
+                # Extract context (100 chars before and after for better context matching)
+                context_start = max(0, pos - 100)
+                context_end = min(len(document_text), end_pos + 100)
                 context = document_text[context_start:context_end]
                 
                 placeholder_contexts.append({
@@ -215,26 +215,28 @@ Return as JSON array:
         Returns:
             List of PlaceholderAnalysis objects
         """
-        # Build list of detected placeholders
+        # Build list of detected placeholders WITH CONTEXT for each occurrence
+        # This is critical for distinguishing identical placeholders like [_____________] that represent different fields
         placeholders_list = ""
-        unique_placeholder_texts = set()
-        for ctx in placeholder_contexts:
-            if ctx['text'] not in unique_placeholder_texts:
-                unique_placeholder_texts.add(ctx['text'])
-                placeholders_list += f"- '{ctx['text']}' (detected as: {ctx['name']})\n"
+        for idx, ctx in enumerate(placeholder_contexts, 1):
+            placeholder_text = ctx['text']
+            context = ctx.get('context', '')
+            placeholders_list += f"\n{idx}. Placeholder: '{placeholder_text}'\n"
+            placeholders_list += f"   Context (100 chars before/after): ...{context}...\n"
         
         prompt = f"""Analyze this document and the placeholders detected by regex. Identify which placeholders are ACTUAL FIELDS that need to be filled in by the user, versus legal text or definitions that should NOT be filled.
 
 FULL DOCUMENT TEXT:
 {document_text}
 
-PLACEHOLDERS DETECTED BY REGEX:
+PLACEHOLDERS DETECTED BY REGEX (WITH CONTEXT):
 {placeholders_list}
 
-INSTRUCTIONS:
-1. Review the FULL document context to understand what each placeholder represents
+CRITICAL INSTRUCTIONS:
+1. Review the FULL document context AND the surrounding context for EACH placeholder occurrence listed above
 2. Identify which placeholders are ACTUAL FIELDS that need user input:
    - Short bracketed placeholders (1-3 words): "[Company Name]", "[COMPANY]", "[Investor Name]", "[name]", "[title]", "[Date of Safe]"
+   - Underscore placeholders like "[_____________]" - these are actual fields that need values
    - Label fields like "Address: ", "Email: ", "Name: ", "By:"
    - Signature section fields (even if similar to header fields)
    - DO NOT include long legal text in brackets/parentheses (even if detected by regex)
@@ -247,14 +249,24 @@ INSTRUCTIONS:
    - "[COMPANY]" is different from "[Company Name]" - include both
    - "[name]" in company section vs investor section - include both separately
    - "By:", "Name:", "Title:", "Address:", "Email:" in signature sections
-5. For placeholders that ARE actual fields:
+5. ABSOLUTELY CRITICAL: For placeholders with IDENTICAL TEXT but DIFFERENT CONTEXT:
+   - You MUST examine EACH occurrence's context separately
+   - If the same placeholder text appears with DIFFERENT surrounding context → treat as SEPARATE FIELDS
+   - Example: If "[_____________]" appears multiple times:
+     * Occurrence 1 near "Purchase Amount" or "$" → field_name: "purchase_amount"
+     * Occurrence 2 near "Post-Money Valuation Cap" or "Valuation Cap" → field_name: "post_money_valuation_cap"
+     * Occurrence 3 near "Pre-Money Valuation Cap" → field_name: "pre_money_valuation_cap"
+   - Look at the surrounding text (100 chars before/after) to understand what each occurrence represents
+   - Return ONE entry per occurrence with different context, even if placeholder text is identical
+   - DO NOT group them together - each unique context needs its own field entry
+6. For placeholders with IDENTICAL TEXT and SAME CONTEXT:
    - Normalize whitespace: "Address: " and "Address:\n" are the SAME field → return ONE entry
    - If the same placeholder appears multiple times with the SAME meaning → group as ONE field
-   - If the same placeholder appears with DIFFERENT meaning (e.g., "[name]" for company vs investor) → separate fields
-6. Provide context-based descriptions to distinguish similar placeholders
-7. When returning placeholder_text, use the CLEANEST version (e.g., "Address: " not "Address:\n                        ")
+7. Provide context-based descriptions to distinguish similar placeholders
+8. When returning placeholder_text, use the CLEANEST version (e.g., "Address: " not "Address:\n                        ")
+9. MANDATORY: You MUST return an entry for EVERY occurrence of actual form fields, even if they have the same placeholder text. Count how many times each placeholder appears in the list above and ensure you return that many entries (if they have different contexts).
 
-Return ONLY actual fields that need filling, as JSON array:
+Return ONLY actual fields that need filling, as JSON array. For identical placeholder texts with different contexts, return separate entries:
 [
   {{
     "field_name": "company_name",
@@ -266,12 +278,21 @@ Return ONLY actual fields that need filling, as JSON array:
     "required": false
   }},
   {{
-    "field_name": "investor_name",
-    "placeholder_text": "[Investor Name]",
-    "data_type": "string",
-    "description": "The name of the investor",
-    "suggested_question": "What is the investor's name?",
-    "example": "John Doe",
+    "field_name": "purchase_amount",
+    "placeholder_text": "[_____________]",
+    "data_type": "number",
+    "description": "The amount paid by the investor (Purchase Amount)",
+    "suggested_question": "What is the purchase amount?",
+    "example": "100000",
+    "required": false
+  }},
+  {{
+    "field_name": "post_money_valuation_cap",
+    "placeholder_text": "[_____________]",
+    "data_type": "number",
+    "description": "The post-money valuation cap amount",
+    "suggested_question": "What is the post-money valuation cap?",
+    "example": "5000000",
     "required": false
   }}
 ]
@@ -309,16 +330,47 @@ ONLY return placeholders that are actual form fields, NOT legal text or definiti
                 placeholder_text_to_contexts[text].append(ctx)
             
             # Match LLM responses to placeholder contexts
+            # For multiple entries with same placeholder_text, match them to different occurrences based on context
             used_contexts = set()
+            placeholder_text_entry_count = {}  # Track how many entries we've seen for each placeholder_text
+            
             for data in fields_data:
                 field_id = data.get('field_name', '').lower().replace(' ', '_')
                 placeholder_text = data.get('placeholder_text', '')
+                description = data.get('description', '').lower()
+                
+                # Track entry count for this placeholder text
+                if placeholder_text not in placeholder_text_entry_count:
+                    placeholder_text_entry_count[placeholder_text] = 0
+                placeholder_text_entry_count[placeholder_text] += 1
                 
                 # Find matching placeholder contexts that haven't been used
                 matching_contexts = [ctx for ctx in placeholder_text_to_contexts.get(placeholder_text, []) 
                                    if id(ctx) not in used_contexts]
                 
-                if matching_contexts:
+                # If multiple entries for same placeholder_text, try to match by context similarity
+                if len(matching_contexts) > 1:
+                    # Try to find context that best matches the description
+                    best_match = None
+                    best_score = 0
+                    for ctx in matching_contexts:
+                        context_lower = ctx.get('context', '').lower()
+                        # Score based on how many words from description appear in context
+                        description_words = set(word for word in description.split() if len(word) > 3)
+                        context_words = set(word for word in context_lower.split() if len(word) > 3)
+                        score = len(description_words & context_words)
+                        if score > best_score:
+                            best_score = score
+                            best_match = ctx
+                    
+                    if best_match:
+                        ctx = best_match
+                        used_contexts.add(id(ctx))
+                    else:
+                        # Use first available
+                        ctx = matching_contexts[0]
+                        used_contexts.add(id(ctx))
+                elif matching_contexts:
                     # Use the first matching context
                     ctx = matching_contexts[0]
                     used_contexts.add(id(ctx))
@@ -339,6 +391,7 @@ ONLY return placeholders that are actual form fields, NOT legal text or definiti
                 analyses.append(analysis)
             
             # Deduplicate analyses - group similar placeholders (whitespace variations)
+            # BUT: Keep separate entries if they have different field_names (same placeholder text, different context)
             def normalize_placeholder(text: str) -> str:
                 """Normalize placeholder text for comparison (remove extra whitespace)"""
                 # Remove leading/trailing whitespace and normalize internal whitespace
@@ -350,21 +403,25 @@ ONLY return placeholders that are actual form fields, NOT legal text or definiti
                     return label_part + ':'
                 return normalized
             
-            # Group analyses by normalized placeholder text
-            normalized_to_analyses = {}
+            # Group analyses by (normalized placeholder text, field_name) tuple
+            # This allows same placeholder text with different field_names to be kept separate
+            key_to_analyses = {}
             for analysis in analyses:
                 normalized = normalize_placeholder(analysis.placeholder_text)
-                if normalized not in normalized_to_analyses:
-                    normalized_to_analyses[normalized] = []
-                normalized_to_analyses[normalized].append(analysis)
+                key = (normalized, analysis.placeholder_name)  # Use both text and field_name as key
+                if key not in key_to_analyses:
+                    key_to_analyses[key] = []
+                key_to_analyses[key].append(analysis)
             
-            # Keep only one analysis per normalized placeholder (prefer the one with better description)
+            # Keep only one analysis per (normalized placeholder, field_name) combination
+            # But keep separate entries for different field_names even if placeholder text is identical
             deduplicated_analyses = []
             regex_detected_texts = {ctx['text'] for ctx in placeholder_contexts}
             
-            for normalized, analysis_list in normalized_to_analyses.items():
+            for (normalized, field_name), analysis_list in key_to_analyses.items():
                 if len(analysis_list) > 1:
-                    # Multiple variations - prefer:
+                    # Multiple variations with same placeholder text AND field_name - deduplicate
+                    # Prefer:
                     # 1. One that matches regex-detected text exactly
                     # 2. One with the best description (not fallback)
                     def score_analysis(a):
@@ -379,7 +436,7 @@ ONLY return placeholders that are actual form fields, NOT legal text or definiti
                     deduplicated_analyses.append(best)
                     if len(analysis_list) > 1:
                         variations = [a.placeholder_text[:50] + '...' if len(a.placeholder_text) > 50 else a.placeholder_text for a in analysis_list]
-                        print(f"  ℹ Deduplicated {len(analysis_list)} variations of '{normalized}': {variations[:2]}... → keeping '{best.placeholder_text[:50]}...'")
+                        print(f"  ℹ Deduplicated {len(analysis_list)} variations of '{normalized}' (field: {field_name}): {variations[:2]}... → keeping '{best.placeholder_text[:50]}...'")
                 else:
                     deduplicated_analyses.append(analysis_list[0])
             
@@ -429,17 +486,45 @@ ONLY return placeholders that are actual form fields, NOT legal text or definiti
                     else:
                         print(f"  - '{text}' (likely legal text - correctly filtered)")
             
+            # Check if LLM missed any occurrences - ensure all actual fields are detected
+            # Group placeholder contexts by text to see if any were missed
+            placeholder_text_to_contexts = {}
+            for ctx in placeholder_contexts:
+                text = ctx['text']
+                if text not in placeholder_text_to_contexts:
+                    placeholder_text_to_contexts[text] = []
+                placeholder_text_to_contexts[text].append(ctx)
+            
+            # For each placeholder text, check if we have analyses for all occurrences
+            for placeholder_text, contexts in placeholder_text_to_contexts.items():
+                # Skip legal text placeholders (long parentheses, etc.)
+                is_likely_field = (
+                    (placeholder_text.startswith('[') and placeholder_text.endswith(']') and len(placeholder_text.strip('[]').split()) <= 3) or
+                    (placeholder_text.strip().endswith(':') and len(placeholder_text.strip().rstrip(':')) < 20) or
+                    ('_____' in placeholder_text)  # Underscore placeholders
+                )
+                
+                if is_likely_field and len(contexts) > 1:
+                    # Check how many analyses we have for this placeholder
+                    matching_analyses = [a for a in deduplicated_analyses 
+                                       if normalize_placeholder(a.placeholder_text) == normalize_placeholder(placeholder_text)]
+                    
+                    if len(matching_analyses) < len(contexts):
+                        print(f"\n  ⚠ Found {len(contexts)} occurrences of '{placeholder_text}' but only {len(matching_analyses)} analysis entries")
+                        print(f"     LLM may have missed some occurrences - they will be handled during replacement")
+            
             # FINAL deduplication pass after auto-recovery
             # This ensures auto-recovered placeholders are also deduplicated
             final_normalized_to_analyses = {}
             for analysis in deduplicated_analyses:
                 normalized = normalize_placeholder(analysis.placeholder_text)
-                if normalized not in final_normalized_to_analyses:
-                    final_normalized_to_analyses[normalized] = []
-                final_normalized_to_analyses[normalized].append(analysis)
+                key = (normalized, analysis.placeholder_name)  # Use both text and field_name
+                if key not in final_normalized_to_analyses:
+                    final_normalized_to_analyses[key] = []
+                final_normalized_to_analyses[key].append(analysis)
             
             final_deduplicated = []
-            for normalized, analysis_list in final_normalized_to_analyses.items():
+            for (normalized, field_name), analysis_list in final_normalized_to_analyses.items():
                 if len(analysis_list) > 1:
                     # Prefer regex-detected exact matches, then better descriptions
                     def score_analysis(a):
@@ -452,7 +537,7 @@ ONLY return placeholders that are actual form fields, NOT legal text or definiti
                     best = max(analysis_list, key=score_analysis)
                     final_deduplicated.append(best)
                     if len(analysis_list) > 1:
-                        print(f"  ℹ Final deduplication: {len(analysis_list)} variations of '{normalized}' → keeping best match")
+                        print(f"  ℹ Final deduplication: {len(analysis_list)} variations of '{normalized}' (field: {field_name}) → keeping best match")
                 else:
                     final_deduplicated.append(analysis_list[0])
             

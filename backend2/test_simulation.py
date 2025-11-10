@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """
-Main script for processing Word documents
-Takes a docx file, detects placeholders with python-docx and LLM,
-gets user answers, and fills the document
+Simulation script to test document processing with predefined values
+Uses the same values from the terminal output to test Address field replacement
 """
 
 import sys
@@ -12,47 +11,15 @@ from document_processor import DocumentProcessor
 from llm_analyzer import LLMAnalyzer
 
 
-def get_user_input(question: str, example: str = "", data_type: str = "string") -> str:
+def simulate_document_processing(doc_path: str):
     """
-    Prompt user for input with validation hints
-    
-    Args:
-        question: The question to ask
-        example: Example value to show
-        data_type: Type of data expected
-    
-    Returns:
-        User's input
-    """
-    print(f"\n{'='*60}")
-    print(f"Question: {question}")
-    if example:
-        print(f"Example: {example}")
-    if data_type:
-        print(f"Type: {data_type}")
-    print(f"{'='*60}")
-    
-    while True:
-        answer = input("Your answer (or 'skip' to leave blank): ").strip()
-        
-        if answer.lower() == 'skip':
-            return ""
-        
-        if answer:
-            return answer
-        else:
-            print("Please provide an answer or type 'skip' to leave blank.")
-
-
-def process_document(doc_path: str):
-    """
-    Main processing function
+    Simulate document processing with predefined answers
     
     Args:
         doc_path: Path to the .docx file
     """
     print("=" * 60)
-    print("Lexsy Document AI - Document Processor")
+    print("Lexsy Document AI - Simulation Test")
     print("=" * 60)
     print(f"\nProcessing: {doc_path}\n")
     
@@ -68,36 +35,6 @@ def process_document(doc_path: str):
     placeholders_count = result.get('placeholder_count', 0)
     print(f"✓ Found {placeholders_count} placeholders using python-docx\n")
     
-    # Log what python-docx extracted
-    print("=" * 60)
-    print("PYTHON-DOCX OUTPUT:")
-    print("=" * 60)
-    print(f"\n📄 Extracted Text Length: {result.get('text_length', 0)} characters")
-    print(f"\n📄 Extracted Text (first 500 chars):")
-    print("-" * 60)
-    full_text_preview = processor.full_text[:500] if processor.full_text else ""
-    print(full_text_preview)
-    if len(processor.full_text) > 500:
-        print(f"... (truncated, total {len(processor.full_text)} chars)")
-    print("-" * 60)
-    
-    print(f"\n🔍 Detected Placeholders ({placeholders_count}):")
-    print("-" * 60)
-    placeholders_data = result.get('placeholders', [])
-    for idx, ph in enumerate(placeholders_data, 1):
-        print(f"  {idx}. Text: '{ph['text']}'")
-        print(f"     Name: {ph['name']}")
-        print(f"     Format: {ph['format']}")
-        print(f"     Position: {ph['position']}-{ph['end_position']}")
-        print(f"     Detected by: {ph['detected_by']}")
-        print()
-    print("=" * 60)
-    print()
-    
-    if placeholders_count == 0:
-        print("No placeholders detected. Document may already be filled or use a different format.")
-        return
-    
     # Step 2: Analyze with LLM
     print("Step 2: Analyzing placeholders with LLM...")
     try:
@@ -110,7 +47,6 @@ def process_document(doc_path: str):
         
         if not analyses:
             print("⚠ LLM did not detect fields. Using regex-detected placeholders...")
-            # Fallback: use regex placeholders
             placeholders_data = result.get('placeholders', [])
             analyses = []
             for ph in placeholders_data:
@@ -128,28 +64,9 @@ def process_document(doc_path: str):
         
         print(f"✓ LLM analyzed {len(analyses)} unique fields\n")
         
-        # Log what LLM detected
-        print("=" * 60)
-        print("LLM OUTPUT:")
-        print("=" * 60)
-        print(f"\n🤖 LLM Detected Fields ({len(analyses)}):")
-        print("-" * 60)
-        for idx, analysis in enumerate(analyses, 1):
-            print(f"  {idx}. Placeholder Text: '{analysis.placeholder_text}'")
-            print(f"     Field Name: {analysis.placeholder_name}")
-            print(f"     Data Type: {analysis.data_type}")
-            print(f"     Description: {analysis.description}")
-            print(f"     Question: {analysis.suggested_question}")
-            print(f"     Example: {analysis.example}")
-            print(f"     Required: {analysis.required}")
-            print()
-        print("=" * 60)
-        print()
-        
     except Exception as e:
         print(f"⚠ LLM analysis failed: {e}")
         print("Using basic placeholder detection...")
-        # Fallback to basic analysis
         placeholders_data = result.get('placeholders', [])
         analyses = []
         for ph in placeholders_data:
@@ -165,9 +82,31 @@ def process_document(doc_path: str):
                 validation_hint=None
             ))
     
-    # Step 3: Get user answers
-    print("Step 3: Collecting user answers...")
-    print(f"\nYou'll be asked {len(analyses)} questions. Answer each one or type 'skip' to leave blank.\n")
+    # Step 3: Map predefined answers to analyses
+    print("Step 3: Using predefined answers (simulation)...")
+    print(f"\nUsing {len(analyses)} predefined answers\n")
+    
+    # Predefined answers matching the terminal output
+    predefined_answers = {
+        'company_name': 'Acme Corp',
+        'investor_name': 'Anish Gil',
+        'purchase_amount': '100000',
+        'post_money_valuation_cap': '5000000',
+        'date_of_safe': '2023-10-01',
+        'state_of_incorporation': 'Delaware',
+        'governing_law_jurisdiction': 'California',
+        'company_signature_name': 'jane Smith',
+        'company_signature_title': 'CTO',
+        'company_address': '123 Main St, Suite 400, Anytown, USA',
+        'company_email': 'info@acmecorp.com',
+        'investor_signature_name': 'Jagan Gil',
+        'investor_signature_title': 'MD',
+        'investor_address': '456 Elm St, Suite 200, Anytown, USA',
+        'investor_email': 'john.doe@example.com',
+        'by': '',  # skip
+        'investor': 'Sequioa',
+        'company': 'Sequioa Capital',
+    }
     
     # Check for duplicate placeholder texts with different field names
     placeholder_text_counts = {}
@@ -179,14 +118,13 @@ def process_document(doc_path: str):
     
     values = {}
     for i, analysis in enumerate(analyses, 1):
-        print(f"\n[{i}/{len(analyses)}]")
-        answer = get_user_input(
-            question=analysis.suggested_question,
-            example=analysis.example,
-            data_type=analysis.data_type
-        )
+        field_name = analysis.placeholder_name
+        
+        # Get answer from predefined answers
+        answer = predefined_answers.get(field_name, '')
         
         if answer:
+            print(f"[{i}/{len(analyses)}] {field_name}: {answer}")
             # If multiple analyses have the same placeholder_text but different field_names,
             # use composite key to distinguish them
             if len(placeholder_text_counts[analysis.placeholder_text]) > 1:
@@ -196,6 +134,8 @@ def process_document(doc_path: str):
                 # Single occurrence, use placeholder text directly
                 key = analysis.placeholder_text
             values[key] = answer
+        else:
+            print(f"[{i}/{len(analyses)}] {field_name}: (skipped)")
     
     if not values:
         print("\n⚠ No values provided. Exiting without filling document.")
@@ -210,23 +150,36 @@ def process_document(doc_path: str):
         print("✓ SUCCESS!")
         print(f"✓ Filled document saved to: {output_path}")
         print(f"{'='*60}\n")
+        
+        # Check if Address fields were replaced
+        print("\n" + "=" * 60)
+        print("VERIFICATION:")
+        print("=" * 60)
+        print("Please check the output document to verify:")
+        print("  ✓ Company Address: 123 Main St, Suite 400, Anytown, USA")
+        print("  ✓ Investor Address: 456 Elm St, Suite 200, Anytown, USA")
+        print("  ✓ Company Email: info@acmecorp.com")
+        print("  ✓ Investor Email: john.doe@example.com")
+        print("=" * 60)
     else:
         print("\n❌ Failed to fill document")
 
 
 def main():
     """Main entry point"""
-    if len(sys.argv) < 2:
-        print("Usage: python main.py <path_to_document.docx>")
-        print("\nExample:")
-        print("  python main.py samples/rent-receipt.docx")
-        sys.exit(1)
+    # Use the same document path from the terminal output
+    default_doc_path = "/Users/anishgillella/Desktop/Stuff/Projects/Lexys AI/samples/Postmoney_Safe_-_Valuation_Cap_Only_-_FINAL-f2a64add6d21039ab347ee2e7194141a4239e364ffed54bad0fe9cf623bf1691_(4).docx"
     
-    doc_path = sys.argv[1]
+    if len(sys.argv) >= 2:
+        doc_path = sys.argv[1]
+    else:
+        doc_path = default_doc_path
     
     # Validate file exists
     if not os.path.exists(doc_path):
         print(f"❌ Error: File not found: {doc_path}")
+        print(f"\nUsage: python test_simulation.py [path_to_document.docx]")
+        print(f"Default: {default_doc_path}")
         sys.exit(1)
     
     # Validate file extension
@@ -235,7 +188,7 @@ def main():
         sys.exit(1)
     
     try:
-        process_document(doc_path)
+        simulate_document_processing(doc_path)
     except KeyboardInterrupt:
         print("\n\n⚠ Process interrupted by user.")
         sys.exit(1)
