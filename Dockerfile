@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements and install Python dependencies
-COPY backend/requirements.txt .
+COPY backend2/requirements.txt .
 RUN pip install --user --no-cache-dir -r requirements.txt
 
 # Runtime stage
@@ -26,22 +26,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=builder /root/.local /root/.local
 
 # Copy application code
-COPY backend/ .
+COPY backend2/ .
 
 # Set environment variables
 ENV PATH=/root/.local/bin:$PATH \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    ENVIRONMENT=production \
-    API_PORT=5000
+    ENVIRONMENT=production
 
-# Expose port (informational)
-EXPOSE 5000
+# Expose port (Railway will set PORT env var at runtime)
+EXPOSE 5001
 
-# Health check
+# Health check (uses PORT env var or defaults to 5001)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD python -c "import socket; socket.create_connection(('localhost', 5000), timeout=5)" || exit 1
+    CMD python -c "import os, socket; port = int(os.getenv('PORT', 5001)); socket.create_connection(('localhost', port), timeout=5)" || exit 1
 
 # Run with Gunicorn for production
-# For development, override with: docker run -e ENVIRONMENT=development ... python app.py
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "4", "--timeout", "120", "--access-logfile", "-", "--error-logfile", "-", "app:app"]
+# Railway sets PORT automatically at runtime, so we use that
+CMD gunicorn --bind 0.0.0.0:${PORT:-5001} --workers 4 --timeout 120 --access-logfile - --error-logfile - app:app

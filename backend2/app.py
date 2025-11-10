@@ -429,7 +429,8 @@ def server_error(error):
 
 
 if __name__ == '__main__':
-    port = int(os.getenv('API_PORT', 5001))
+    # Railway sets PORT, fallback to API_PORT, then default to 5001
+    port = int(os.getenv('PORT') or os.getenv('API_PORT', 5001))
     environment = os.getenv('ENVIRONMENT', 'development')
     debug_mode = environment == 'development'
     
