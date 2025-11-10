@@ -28,6 +28,9 @@ COPY --from=builder /root/.local /root/.local
 # Copy application code
 COPY backend2/ .
 
+# Make startup script executable
+RUN chmod +x start.sh
+
 # Set environment variables
 ENV PATH=/root/.local/bin:$PATH \
     PYTHONUNBUFFERED=1 \
@@ -41,7 +44,5 @@ EXPOSE 5001
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD python -c "import os, socket; port = int(os.getenv('PORT', 5001)); socket.create_connection(('localhost', port), timeout=5)" || exit 1
 
-# Run with Gunicorn for production
-# Railway sets PORT automatically at runtime, so we use that
-# Use shell form to expand PORT variable, fallback to 5001
-CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT:-5001} --workers 4 --timeout 120 --access-logfile - --error-logfile - app:app"]
+# Run with startup script for better error visibility
+CMD ["./start.sh"]
