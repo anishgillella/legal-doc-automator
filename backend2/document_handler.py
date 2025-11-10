@@ -4,6 +4,7 @@ Handles loading, modifying, and saving Word documents using python-docx
 """
 
 import os
+import sys
 import re
 from docx import Document
 from typing import Dict, List, Tuple, Optional
@@ -23,7 +24,7 @@ class DocumentHandler:
             self._extract_text_structure()
             return True
         except Exception as e:
-            print(f"Error loading document: {e}")
+            print(f"Error loading document: {e}", file=sys.stderr)
             return False
     
     def _extract_text_structure(self):
@@ -348,7 +349,7 @@ class DocumentHandler:
             
             return replaced_count > 0
         except Exception as e:
-            print(f"Error replacing placeholder: {e}")
+            print(f"Error replacing placeholder: {e}", file=sys.stderr)
             return False
     
     def replace_placeholder_at_position(self, placeholder: str, value: str, position_index: int = 0) -> bool:
@@ -535,7 +536,7 @@ class DocumentHandler:
             self._replace_text_preserving_format(target_para, new_text, label_pos if not is_explicit_placeholder else None)
             return True
         except Exception as e:
-            print(f"Error replacing placeholder at position: {e}")
+            print(f"Error replacing placeholder at position: {e}", file=sys.stderr)
             return False
     
     def save_document(self, output_path: str) -> bool:
@@ -544,6 +545,6 @@ class DocumentHandler:
             self.doc.save(output_path)
             return True
         except Exception as e:
-            print(f"Error saving document: {e}")
+            print(f"Error saving document: {e}", file=sys.stderr)
             return False
 

@@ -204,19 +204,10 @@ def fill_document():
             # Process document
             processor = DocumentProcessor(temp_path)
             
-            # Debug: Log what we're trying to replace
-            print(f"\n{'='*80}")
-            print(f"FILL OPERATION - Attempting to fill {len(values)} placeholders")
-            print(f"{'='*80}")
-            for key, val in values.items():
-                val_preview = val[:40] if len(val) > 40 else val
-                print(f"  Placeholder: {key:40} | Value: {val_preview}")
-            print(f"{'='*80}\n")
-            
             success, output_path = processor.fill_placeholders(values)
             
             if not success:
-                print(f"Fill operation failed for file: {filename}")
+                print(f"Fill operation failed for file: {filename}", file=sys.stderr)
                 return jsonify({'error': 'Failed to fill document'}), 500
             
             # Send filled document
@@ -233,9 +224,9 @@ def fill_document():
                 os.remove(temp_path)
     
     except Exception as e:
-        print(f"Fill endpoint error: {str(e)}")
+        print(f"Fill endpoint error: {str(e)}", file=sys.stderr)
         import traceback
-        traceback.print_exc()
+        traceback.print_exc(file=sys.stderr)
         return jsonify({'error': str(e)}), 500
 
 

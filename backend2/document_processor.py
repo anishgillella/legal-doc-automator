@@ -4,12 +4,16 @@ Orchestrates placeholder detection and replacement
 """
 
 import os
+import sys
 import json
 from typing import Dict, List, Optional, Tuple
 
 from document_handler import DocumentHandler
 from placeholder_detector import PlaceholderDetector, detect_placeholders_simple
 from llm_analyzer import LLMAnalyzer, PlaceholderAnalysis
+
+# Check if verbose logging is enabled (for production, set VERBOSE_LOGGING=false)
+VERBOSE_LOGGING = os.getenv('VERBOSE_LOGGING', 'false').lower() == 'true'
 
 
 class DocumentProcessor:
@@ -136,7 +140,8 @@ class DocumentProcessor:
             
             # Priority 1: Position-based replacements (more specific)
             if position_based:
-                print(f"✓ Using {len(position_based)} position-based replacements\n")
+                if VERBOSE_LOGGING:
+                    print(f"✓ Using {len(position_based)} position-based replacements\n")
                 for key, value in position_based.items():
                     placeholder_text = key.rsplit('__pos_', 1)[0]
                     try:
@@ -144,31 +149,38 @@ class DocumentProcessor:
                         success = self.doc_handler.replace_placeholder_at_position(placeholder_text, value, position)
                         if success:
                             total_replacements += 1
-                            print(f"  ✓ Replaced: {key:40} → {value[:25]}")
+                            if VERBOSE_LOGGING:
+                                print(f"  ✓ Replaced: {key:40} → {value[:25]}")
                         else:
                             # Fallback to regular replacement
                             success = self.doc_handler.replace_placeholder(placeholder_text, value)
                             if success:
                                 total_replacements += 1
-                                print(f"  ✓ Fallback: {key:40} → {value[:25]}")
+                                if VERBOSE_LOGGING:
+                                    print(f"  ✓ Fallback: {key:40} → {value[:25]}")
                             else:
-                                print(f"  ✗ Failed: {key}")
+                                if VERBOSE_LOGGING:
+                                    print(f"  ✗ Failed: {key}")
                     except Exception as e:
-                        print(f"  Error: {key}: {e}")
+                        if VERBOSE_LOGGING:
+                            print(f"  Error: {key}: {e}")
                 
-                print()
+                if VERBOSE_LOGGING:
+                    print()
             
             # Priority 2: Field-based replacements (match by field_name and context)
             # IMPORTANT: Replace in reverse order (last to first) to avoid position shifts
             if field_based:
-                print(f"✓ Using {len(field_based)} field-based replacements\n")
+                if VERBOSE_LOGGING:
+                    print(f"✓ Using {len(field_based)} field-based replacements\n")
                 
                 # Group by placeholder_text to handle multiple occurrences
                 placeholder_groups = {}
                 for key, value in field_based.items():
                     parts = key.rsplit('__field_', 1)
                     if len(parts) != 2:
-                        print(f"  ✗ Invalid field key format: {key}")
+                        if VERBOSE_LOGGING:
+                            print(f"  ✗ Invalid field key format: {key}")
                         continue
                     
                     placeholder_text = parts[0]
@@ -253,7 +265,8 @@ class DocumentProcessor:
                     
                     if not matching_placeholders:
                         for _, _, key in field_entries:
-                            print(f"  ✗ Failed: {key} (placeholder '{placeholder_text}' not found)")
+                            if VERBOSE_LOGGING:
+                                print(f"  ✗ Failed: {key} (placeholder '{placeholder_text}' not found)")
                         continue
                     
                     # For each field entry, find the best matching occurrence
@@ -326,7 +339,8 @@ class DocumentProcessor:
                             # Include actual_text so handler can use it if needed
                             replacements_to_do.append((best_match_idx, replacement_pattern, value, key, actual_placeholder_text))
                         else:
-                            print(f"  ✗ Failed: {key} (could not match field_name '{field_name}' to any occurrence)")
+                            if VERBOSE_LOGGING:
+                                print(f"  ✗ Failed: {key} (could not match field_name '{field_name}' to any occurrence)")
                     
                     # Now replace all matches in reverse order (last occurrence first)
                     # Sort by original index descending
@@ -343,7 +357,8 @@ class DocumentProcessor:
                         
                         # Safety check: ensure reverse_idx is valid
                         if reverse_idx < 0:
-                            print(f"  ✗ Failed: {key} (invalid reverse_idx: {reverse_idx}, remaining_count: {remaining_count}, replacements_done: {replacements_done})")
+                            if VERBOSE_LOGGING:
+                                print(f"  ✗ Failed: {key} (invalid reverse_idx: {reverse_idx}, remaining_count: {remaining_count}, replacements_done: {replacements_done})")
                             continue
                         
                         # Use the base label pattern for replacement (pattern matching handles whitespace)
@@ -352,23 +367,28 @@ class DocumentProcessor:
                         if success:
                             total_replacements += 1
                             replacements_done += 1
-                            print(f"  ✓ Replaced: {key:40} → {value[:25]} (matched occurrence {original_idx + 1}/{len(matching_placeholders)}, reverse_idx={reverse_idx})")
+                            if VERBOSE_LOGGING:
+                                print(f"  ✓ Replaced: {key:40} → {value[:25]} (matched occurrence {original_idx + 1}/{len(matching_placeholders)}, reverse_idx={reverse_idx})")
                         else:
                             # Fallback: try with normalized text
                             success = self.doc_handler.replace_placeholder_at_position(placeholder_text, value, reverse_idx)
                             if success:
                                 total_replacements += 1
                                 replacements_done += 1
-                                print(f"  ✓ Replaced: {key:40} → {value[:25]} (matched occurrence {original_idx + 1}/{len(matching_placeholders)}, fallback, reverse_idx={reverse_idx})")
+                                if VERBOSE_LOGGING:
+                                    print(f"  ✓ Replaced: {key:40} → {value[:25]} (matched occurrence {original_idx + 1}/{len(matching_placeholders)}, fallback, reverse_idx={reverse_idx})")
                             else:
-                                print(f"  ✗ Failed: {key} (replacement failed - tried '{replacement_pattern}' and '{placeholder_text}', reverse_idx={reverse_idx}, remaining_count={remaining_count})")
+                                if VERBOSE_LOGGING:
+                                    print(f"  ✗ Failed: {key} (replacement failed - tried '{replacement_pattern}' and '{placeholder_text}', reverse_idx={reverse_idx}, remaining_count={remaining_count})")
                 
-                print()
+                if VERBOSE_LOGGING:
+                    print()
             
             # Priority 3: Plain placeholder text replacements
             # For placeholders that appear multiple times, replace ALL occurrences with the same value
             if placeholder_keys:
-                print(f"✓ Using {len(placeholder_keys)} placeholder-based replacements\n")
+                if VERBOSE_LOGGING:
+                    print(f"✓ Using {len(placeholder_keys)} placeholder-based replacements\n")
                 for placeholder_text, value in placeholder_keys.items():
                     # Count how many times this placeholder appears
                     occurrences_count = sum(1 for p in self.placeholders if p.text == placeholder_text)
@@ -384,34 +404,47 @@ class DocumentProcessor:
                                 total_replacements += 1
                         
                         if replaced_this_placeholder > 0:
-                            print(f"  ✓ Replaced: {placeholder_text:40} → {value[:25]} ({replaced_this_placeholder}/{occurrences_count} occurrences)")
+                            if VERBOSE_LOGGING:
+                                print(f"  ✓ Replaced: {placeholder_text:40} → {value[:25]} ({replaced_this_placeholder}/{occurrences_count} occurrences)")
                         else:
-                            print(f"  ✗ Failed:   {placeholder_text} (0/{occurrences_count} occurrences)")
+                            if VERBOSE_LOGGING:
+                                print(f"  ✗ Failed:   {placeholder_text} (0/{occurrences_count} occurrences)")
                     else:
                         # Single occurrence, use regular replacement
                         success = self.doc_handler.replace_placeholder(placeholder_text, value)
                         if success:
                             total_replacements += 1
-                            print(f"  ✓ Replaced: {placeholder_text:40} → {value[:25]}")
+                            if VERBOSE_LOGGING:
+                                print(f"  ✓ Replaced: {placeholder_text:40} → {value[:25]}")
                         else:
                             # Debug: check if placeholder exists
                             matching_placeholders = [p for p in self.placeholders if p.text == placeholder_text]
-                            if matching_placeholders:
-                                print(f"  ✗ Failed:   {placeholder_text} (found {len(matching_placeholders)} occurrences but replacement failed)")
-                            else:
-                                print(f"  ✗ Failed:   {placeholder_text} (not found in document)")
+                            if VERBOSE_LOGGING:
+                                if matching_placeholders:
+                                    print(f"  ✗ Failed:   {placeholder_text} (found {len(matching_placeholders)} occurrences but replacement failed)")
+                                else:
+                                    print(f"  ✗ Failed:   {placeholder_text} (not found in document)")
                 
-                print()
+                if VERBOSE_LOGGING:
+                    print()
             
-            print(f"\n{'='*80}")
-            print(f"RESULT: Successfully replaced {total_replacements}/{len(values)} placeholders")
-            print(f"{'='*80}\n")
+            if VERBOSE_LOGGING:
+                print(f"\n{'='*80}")
+                print(f"RESULT: Successfully replaced {total_replacements}/{len(values)} placeholders")
+                print(f"{'='*80}\n")
             
             # Save to output folder
-            # Get the project root (parent of backend2)
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            project_root = os.path.dirname(current_dir)
-            output_dir = os.path.join(project_root, "output")
+            # Use OUTPUT_DIR environment variable if set, otherwise use temp directory
+            output_dir = os.getenv('OUTPUT_DIR')
+            if not output_dir:
+                # Default: use temp directory for production, or project output folder for development
+                if os.getenv('ENVIRONMENT', 'production') == 'development':
+                    current_dir = os.path.dirname(os.path.abspath(__file__))
+                    project_root = os.path.dirname(current_dir)
+                    output_dir = os.path.join(project_root, "output")
+                else:
+                    import tempfile
+                    output_dir = tempfile.gettempdir()
             
             # Create output directory if it doesn't exist
             os.makedirs(output_dir, exist_ok=True)
@@ -425,13 +458,15 @@ class DocumentProcessor:
             if self.doc_handler.save_document(output_path):
                 return True, output_path
             else:
-                print("Failed to save document")
+                if VERBOSE_LOGGING:
+                    print("Failed to save document", file=sys.stderr)
                 return False, ""
             
         except Exception as e:
-            print(f"Error filling placeholders: {e}")
-            import traceback
-            traceback.print_exc()
+            print(f"Error filling placeholders: {e}", file=sys.stderr)
+            if VERBOSE_LOGGING:
+                import traceback
+                traceback.print_exc(file=sys.stderr)
             return False, ""
     
     def fill_by_name(self, values: Dict[str, str]) -> Tuple[bool, str]:

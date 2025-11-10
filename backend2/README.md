@@ -102,9 +102,11 @@ with open('document.docx', 'rb') as f:
 
 ## Environment Variables
 
-- `API_PORT` - Port to run the server on (default: 5000)
-- `CORS_ORIGINS` - Comma-separated list of allowed CORS origins (default: http://localhost:3000)
-- `ENVIRONMENT` - Set to 'development' for debug mode (default: development)
+- `API_PORT` - Port to run the server on (default: 5001)
+- `CORS_ORIGINS` - Comma-separated list of allowed CORS origins (default: http://localhost:3000,http://localhost:3001)
+- `ENVIRONMENT` - Set to 'production' for production mode, 'development' for debug mode (default: development)
+- `VERBOSE_LOGGING` - Set to 'true' to enable verbose logging (default: false)
+- `OUTPUT_DIR` - Directory to save filled documents (default: temp directory in production, project/output in development)
 
 ## Features
 
