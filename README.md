@@ -12,13 +12,13 @@ LexAI is a complete document processing solution consisting of:
 
 ### Key Features
 
-- ✅ **Intelligent Placeholder Detection** - Detects various placeholder formats (`[text]`, `{text}`, `_text_`, etc.) and label fields
-- ✅ **LLM-Powered Analysis** - Uses OpenRouter API (Qwen2.5) to understand placeholder context and requirements
-- ✅ **Smart Field Matching** - Distinguishes identical placeholders in different contexts
-- ✅ **Formatting Preservation** - Maintains original document formatting during replacement
-- ✅ **Modern Web UI** - Beautiful, responsive interface built with Next.js and Tailwind CSS
-- ✅ **Real-time Validation** - AI-powered input validation with helpful suggestions
-- ✅ **Production Ready** - Docker support, environment-based configuration, and error handling
+- **Intelligent Placeholder Detection** - Detects various placeholder formats (`[text]`, `{text}`, `_text_`, etc.) and label fields
+- **LLM-Powered Analysis** - Uses OpenRouter API (Qwen2.5) to understand placeholder context and requirements
+- **Smart Field Matching** - Distinguishes identical placeholders in different contexts
+- **Formatting Preservation** - Maintains original document formatting during replacement
+- **Modern Web UI** - Beautiful, responsive interface built with Next.js and Tailwind CSS
+- **Real-time Validation** - AI-powered input validation with helpful suggestions
+- **Production Ready** - Docker support, environment-based configuration, and error handling
 
 ## Architecture
 
